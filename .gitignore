@@ -17,3 +17,6 @@ Crash report*.txt
 # Misc
 *.log
 *.tmp
+
+# Local release artifacts
+*.zip
