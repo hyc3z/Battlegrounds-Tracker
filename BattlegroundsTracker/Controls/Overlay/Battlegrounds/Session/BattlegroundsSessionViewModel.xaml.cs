@@ -1,0 +1,743 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using HearthDb.Enums;
+using HearthMirror;
+using HearthMirror.Objects;
+using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Composition;
+using Hearthstone_Deck_Tracker.Enums.Hearthstone;
+using Hearthstone_Deck_Tracker.Hearthstone;
+using Hearthstone_Deck_Tracker.HsReplay;
+using Hearthstone_Deck_Tracker.Utility;
+using Hearthstone_Deck_Tracker.Utility.Analytics;
+using Hearthstone_Deck_Tracker.Utility.Battlegrounds;
+using Hearthstone_Deck_Tracker.Utility.Exceptions;
+using Hearthstone_Deck_Tracker.Utility.Extensions;
+using Hearthstone_Deck_Tracker.Utility.Logging;
+using Hearthstone_Deck_Tracker.Utility.MVVM;
+using Hearthstone_Deck_Tracker.Utility.RemoteData;
+using HSReplay.Requests;
+using HSReplay.Responses;
+using Newtonsoft.Json;
+using static Hearthstone_Deck_Tracker.Utility.Battlegrounds.BattlegroundsLastGames;
+
+namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Session;
+
+public class BattlegroundsSessionViewModel : ViewModel
+{
+	private BattlegroundsDb Db => BattlegroundsDbSingleton.Get(IsDuos);
+
+	public BattlegroundsSessionViewModel()
+	{
+		HSReplayNetOAuth.AccountDataUpdated += UpdateCompositionStatsVisibility;
+		HSReplayNetOAuth.LoggedOut += UpdateCompositionStatsVisibility;
+		Tier7Trial.OnStatusUpdated += UpdateCompositionStatsVisibility;
+	}
+
+	public ObservableCollection<Race> AvailableMinionTypes { get; } = new();
+	public ObservableCollection<Race> BannedMinionTypes { get; } = new();
+	public ObservableCollection<BattlegroundsGameViewModel> SessionGames { get; } = new();
+
+	public Race BannedMinionType1 => AvailableMinionTypes.FirstOrDefault();
+
+	public Hearthstone.Card? PlayerDeity
+	{
+		get => GetProp<Hearthstone.Card?>(null);
+		private set => SetProp(value);
+	}
+
+	public void UpdatePlayerDeity() => PlayerDeity = Core.Game.BattlegroundsPlayerDeity;
+
+	public void OnGameEnd()
+	{
+		if(Core.Game.Spectator)
+			return;
+
+		UpdateCurrentRating(Core.Game.CurrentGameStats?.BattlegroundsRatingAfter ?? 0, Core.Game.CurrentBattlegroundsRating);
+
+		UpdateLatestGames();
+	}
+
+	// the post-game rating is 0 when we could not read it from the client, so we fall back to the rating we already
+	// have rather than claiming the player dropped to 0
+	internal void UpdateCurrentRating(int ratingAfter, int? clientRating)
+	{
+		var currentRating = ratingAfter > 0 ? ratingAfter : clientRating;
+		if(currentRating > 0)
+			BgRatingCurrent = currentRating.Value.ToString("N0", LocUtil.Culture);
+	}
+
+	private readonly SemaphoreSlim _updateCompStatsSemaphore = new SemaphoreSlim(1, 1);
+
+
+	public async void Update()
+	{
+		if(Core.Game.IsChinaModuleActive)
+			return;
+
+		if(Core.Game.Spectator)
+			await Task.Delay(1500);
+
+		UpdateMinionTypes();
+		UpdatePlayerDeity();
+
+		var sessionGames = await UpdateLatestGames();
+		var firstGame = sessionGames.FirstOrDefault();
+
+		var rating = CurrentRating(ClientRating(Core.Game.BattlegroundsRatingInfo, IsDuos), Core.Game.BattlegroundsRatingInfoCachedAt, sessionGames.LastOrDefault()) ?? 0;
+		var ratingStart = firstGame == null ? rating : firstGame.SeasonReset ? 0 : firstGame.Rating;
+		if(rating == 0)
+			rating = ratingStart;
+		BgRatingStart = ratingStart.ToString("N0", LocUtil.Culture);
+		BgRatingCurrent = rating.ToString("N0", LocUtil.Culture);
+
+		// Update method might be called multiple times.
+		// We need to prevent multiple calls to UpdateCompositionStatsIfNeeded to happen at the same time.
+		// This also ensures only one API call is made.
+		try
+		{
+			await _updateCompStatsSemaphore.WaitAsync();
+			await UpdateCompositionStatsIfNeeded();
+		}
+		finally
+		{
+			_updateCompStatsSemaphore.Release();
+		}
+	}
+
+	private bool IsDuos => Core.Game.IsInMenu
+		? BattlegroundsGameMode == SelectedBattlegroundsGameMode.DUOS
+		: Core.Game.IsBattlegroundsDuosMatch;
+
+	// Duos and Solos are separate ladders, so mixing them up makes a Duos rating look like a season reset
+	internal static int? ClientRating(BattlegroundRatingInfo? ratingInfo, bool duos)
+		=> duos ? ratingInfo?.DuosRating : ratingInfo?.Rating;
+
+	// the client rating is only re-read when entering the Battlegrounds menu, so a game that ended after that
+	// knows the newer rating
+	internal static int? CurrentRating(int? clientRating, DateTime? clientRatingCachedAt, GameItem? lastGame)
+	{
+		if(lastGame?.RatingAfter is int ratingAfter && (clientRatingCachedAt == null || DateTime.Parse(lastGame.EndTime) > clientRatingCachedAt))
+			return ratingAfter;
+		return clientRating;
+	}
+
+	public void UpdateSectionsVisibilities()
+	{
+		AvailableMinionTypesSectionVisibility = Config.Instance.ShowSessionRecapMinionsAvailable
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+		BannedMinionTypesSectionVisibility = Config.Instance.ShowSessionRecapMinionsBanned
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+		BgStartCurrentMMRSectionVisibility = Config.Instance.ShowSessionRecapStartCurrentMMR
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+		BgLatestGamesSectionVisibility = Config.Instance.ShowSessionRecapLatestGames
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+		Core.Windows.BattlegroundsSessionWindow.UpdateBattlegroundsSessionLayoutHeight();
+	}
+
+	public void UpdateCompositionStatsVisibility()
+	{
+		if(IsDuos || !Config.Instance.ShowBattlegroundsTier7SessionCompStats
+		          || !Config.Instance.EnableBattlegroundsTier7Overlay)
+		{
+			AvailableCompStatsSectionVisibility = Visibility.Collapsed;
+			return;
+		}
+
+		var userOwnsTier7 = HSReplayNetOAuth.AccountData?.IsTier7 ?? false;
+
+		bool available;
+		if(Core.Game.IsInMenu)
+			available = userOwnsTier7 || Tier7Trial.RemainingTrials > 0;
+		else
+			available = Tier7Trial.RemainingTrials > 0 || Tier7Trial.IsTrialForCurrentGameActive(Core.Game.MetaData.ServerInfo?.GameHandle) || userOwnsTier7 || CompositionStats != null;
+
+		AvailableCompStatsSectionVisibility = available ? Visibility.Visible : Visibility.Collapsed;
+	}
+
+	private void UpdateMinionTypes()
+	{
+		var availableRaces = BattlegroundsUtils.GetAvailableRaces();
+		SetMinionTypes(availableRaces);
+		if(availableRaces == null && Core.Game.IsBattlegroundsMatch && !Core.Game.IsInMenu)
+			SetMinionTypesOnceReadable().Forget();
+	}
+
+	private async Task SetMinionTypesOnceReadable()
+	{
+		try
+		{
+			if(await BattlegroundsUtils.WaitForAvailableRaces() == null)
+				return;
+		}
+		catch(OperationCanceledException)
+		{
+			return;
+		}
+
+		// the match is over, so leave the recap to the menu's own updates
+		if(Core.Game.IsInMenu)
+			return;
+
+		// read again rather than use the result, so a newer game only ever gets its own races
+		SetMinionTypes(BattlegroundsUtils.GetAvailableRaces());
+	}
+
+	private void SetMinionTypes(HashSet<Race>? races)
+	{
+		var allRaces = Db.Races.Where(x => x != Race.INVALID && x != Race.ALL).ToList();
+		var availableRaces = races?.ToList() ?? allRaces;
+		var unavailableRaces = allRaces.Where(x => !availableRaces.Contains(x)).ToList();
+
+		var validMinionTypes = unavailableRaces.Count() >= 5 && unavailableRaces.Count() != allRaces.Count();
+		if(validMinionTypes)
+		{
+			AvailableMinionTypes.Clear();
+			foreach(var race in availableRaces.OrderBy(t => HearthDbConverter.GetLocalizedRace(t) ?? ""))
+			{
+				AvailableMinionTypes.Add(race);
+			}
+
+			BannedMinionTypes.Clear();
+			foreach(var race in unavailableRaces.OrderBy(t => HearthDbConverter.GetLocalizedRace(t) ?? ""))
+			{
+				BannedMinionTypes.Add(race);
+			}
+
+			OnPropertyChanged(nameof(BannedMinionType1));
+		}
+
+		if(Core.Game.CurrentMode == Mode.GAMEPLAY && SceneHandler.Scene == Mode.GAMEPLAY && validMinionTypes)
+		{
+			MinionTypesBodyVisibility = Visibility.Visible;
+			MinionTypesWaitingMsgVisibility = Visibility.Collapsed;
+		}
+		else
+		{
+			MinionTypesBodyVisibility = Visibility.Hidden;
+			MinionTypesWaitingMsgVisibility = Visibility.Visible;
+		}
+	}
+
+	private async Task<BattlegroundsCompStats?> GetBattlegroundsCompStats()
+	{
+		if(!Core.Game.IsBattlegroundsMatch)
+			return null;
+
+		if(!Tier7Trial.IsAvailable)
+			return null;
+
+		if(IsDuos)
+			return null;
+
+	    if(Core.Game.Spectator)
+	        return null;
+
+	    if(!Config.Instance.EnableBattlegroundsTier7Overlay || !Config.Instance.ShowBattlegroundsTier7SessionCompStats)
+	        return null;
+
+	    if(Remote.Config.Data?.Tier7?.Disabled ?? false)
+	        throw new CompositionStatsException("Tier7 remotely disabled");
+
+	    var availableRaces = await BattlegroundsUtils.WaitForAvailableRaces();
+
+	    if(availableRaces == null)
+		    throw new CompositionStatsException("Unable to get available races");
+
+	    var compParams = new BattlegroundsCompStatsParams
+	    {
+		    BattlegroundsRaces = availableRaces.Cast<int>().ToArray(),
+		    DeityDbfId = BattlegroundsUtils.GetBattlegroundsDeityDbfId(Core.Game.GameEntity),
+		    LanguageCode = Helper.GetCardLanguage(),
+	    };
+
+	    // Avoid using a trial when we can't get the api params anyway.
+	    if(compParams == null)
+			throw new CompositionStatsException("Unable to get API parameters");
+
+	    var access = await Tier7Trial.GetAccess();
+	    if(access == null)
+	    {
+	        if(!((Core.Game.GameEntity?.GetTag(GameTag.STEP) ?? 0) <= (int)Step.BEGIN_MULLIGAN))
+		        return null;
+
+	        throw new CompositionStatsException("Unable to start Tier7 trial");
+	    }
+
+	#if(DEBUG)
+	    var json = JsonConvert.SerializeObject(compParams);
+	    Log.Debug($"Fetching Battlegrounds Hero Pick stats with parameters={json}...");
+	#endif
+
+	    BattlegroundsCompStats? compStats;
+	    try
+	    {
+		    compStats = access.TrialToken is string token
+			    ? await ApiWrapper.GetTier7CompStats(token, compParams)
+			    : await HSReplayNetOAuth.MakeRequest(c => c.GetTier7CompStats(compParams)
+			);
+	    }
+	    catch
+	    {
+		    throw new CompositionStatsException("Invalid server response");
+	    }
+
+	    if(compStats == null || compStats.Data.FirstPlaceCompsLobbyRaces.Count == 0)
+		    throw new CompositionStatsException("Invalid server response");
+
+	    return compStats;
+	}
+
+	private bool _compStatsFailed;
+
+	private void ClearCompositionStats()
+	{
+		CompositionStats = null;
+		_compStatsFailed = false;
+		CompStatsBodyVisibility = Visibility.Collapsed;
+		CompStatsWaitingMsgVisibility = Visibility.Visible;
+		CompStatsErrorVisibility = Visibility.Hidden;
+
+		Core.Windows.BattlegroundsSessionWindow.UpdateBattlegroundsSessionLayoutHeight();
+	}
+
+	private void ShowCompositionStats()
+	{
+		CompStatsBodyVisibility = Visibility.Visible;
+		CompStatsWaitingMsgVisibility = Visibility.Collapsed;
+		CompStatsErrorVisibility = Visibility.Hidden;
+
+		Core.Windows.BattlegroundsSessionWindow.UpdateBattlegroundsSessionLayoutHeight();
+	}
+
+	private async Task UpdateCompositionStatsIfNeeded()
+	{
+		if(Core.Game.CurrentMode != Mode.GAMEPLAY)
+		{
+			ClearCompositionStats();
+			return;
+		}
+
+		// fetch while the loading screen still covers the game, so the stats are ready when it fades in
+		if(!(CompositionStats?.Any() ?? false) && !_compStatsFailed)
+			await TrySetCompStats();
+
+		if(SceneHandler.Scene == Mode.GAMEPLAY)
+			RevealCompositionStats();
+	}
+
+	private void RevealCompositionStats()
+	{
+		if(_compStatsFailed)
+		{
+			CompStatsErrorVisibility = Visibility.Visible;
+			CompStatsBodyVisibility = Visibility.Hidden;
+			CompStatsWaitingMsgVisibility = Visibility.Hidden;
+		}
+		else if(CompositionStats != null)
+			ShowCompositionStats();
+	}
+
+	private async Task TrySetCompStats()
+	{
+		var statsTask = GetBattlegroundsCompStats();
+
+		BattlegroundsCompStats? battlegroundsCompStats = null;
+		try
+		{
+			battlegroundsCompStats = await statsTask;
+		}
+		catch(OperationCanceledException)
+		{
+			return;
+		}
+		catch(Exception e)
+		{
+			HandleCompStatsError(e);
+		}
+
+		if(battlegroundsCompStats is BattlegroundsCompStats compStats)
+		{
+			var firstPlaceComps = compStats.Data?.FirstPlaceCompsLobbyRaces;
+			if(firstPlaceComps != null)
+			{
+				SetBattlegroundsCompositionStatsViewModel(
+					firstPlaceComps
+				);
+			}
+		}
+	}
+
+	public void HideCompStatsOnError()
+	{
+		if(CompStatsErrorVisibility == Visibility.Visible)
+		{
+			AvailableCompStatsSectionVisibility = Visibility.Collapsed;
+			Core.Windows.BattlegroundsSessionWindow.UpdateBattlegroundsSessionLayoutHeight();
+		}
+	}
+
+	private void HandleCompStatsError(Exception error)
+	{
+		Influx.OnGetBattlegroundsCompositionStatsError(error.GetType().Name, error.Message);
+
+		var beforeHeroPicked = (Core.Game.GameEntity?.GetTag(GameTag.STEP) ?? 0) <= (int)Step.BEGIN_MULLIGAN;
+		if(!beforeHeroPicked)
+		{
+			Task.Run(async () =>
+			{
+				// Ensure update after 20 seconds
+				await Task.Delay(20_000);
+				Application.Current.Dispatcher.Invoke(HideCompStatsOnError);
+			}).Forget();
+		}
+
+		_compStatsFailed = true;
+	}
+
+	private async Task<List<GameItem>> UpdateLatestGames()
+	{
+		var duos = IsDuos;
+		var sortedGames = (await Instance.PlayerGames(duos))
+			.OrderBy(g => g.StartTime)
+			.ToList();
+		DeleteOldGames(sortedGames);
+
+		var sessionGames = GetSessionGames(sortedGames, Core.Game.BattlegroundsRatingInfo, duos);
+
+		SessionGames.Clear();
+		sessionGames
+			.GetRange(Math.Max(sessionGames.Count - 8, 0), Math.Min(8, sessionGames.Count))
+			.OrderByDescending(g => g.StartTime)
+			.ToList()
+			.ForEach(AddOrUpdateGame);
+
+		GridHeaderVisibility = sessionGames.Count > 0
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+		GamesEmptyStateVisibility = sessionGames.Count == 0
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+		Core.Windows.BattlegroundsSessionWindow.UpdateBattlegroundsSessionLayoutHeight();
+
+		return sessionGames;
+	}
+
+	internal static List<GameItem> GetSessionGames(List<GameItem> sortedGames, BattlegroundRatingInfo? ratingInfo, bool duos)
+	{
+		DateTime? sessionStartTime = null;
+		DateTime? previousGameEndTime = null;
+		var previousGameRatingAfter = 0;
+
+		foreach(var g in sortedGames)
+		{
+			if(previousGameEndTime != null)
+			{
+				var gStartTime = DateTime.Parse(g.StartTime);
+				var ts = gStartTime - (DateTime)previousGameEndTime;
+
+				var ratingReset = IsRatingReset(previousGameRatingAfter, g.Rating);
+
+				if(ts.TotalHours >= 2 || ratingReset)
+					sessionStartTime = gStartTime;
+			}
+			previousGameEndTime = DateTime.Parse(g.EndTime);
+			previousGameRatingAfter = g.RatingAfterOrCarriedForward;
+		};
+
+		var sessionGames = sessionStartTime == null
+			? sortedGames
+			: sortedGames.Where(g => DateTime.Parse(g.StartTime) >= sessionStartTime).ToList();
+
+		if(sessionGames.Count > 0)
+		{
+			var lastGame = sessionGames.LastOrDefault();
+
+			// Check for MMR reset on last game
+			var ratingResetAfterLastGame = false;
+			if(ClientRating(ratingInfo, duos) is int currentMMR)
+				ratingResetAfterLastGame = IsRatingReset(lastGame.RatingAfterOrCarriedForward, currentMMR);
+
+			var ts = DateTime.Now - DateTime.Parse(lastGame.EndTime);
+
+			if(ts.TotalHours >= 2 || ratingResetAfterLastGame)
+				return new List<GameItem>();
+		}
+
+		return sessionGames;
+	}
+
+	private void DeleteOldGames(List<GameItem> sortedGames)
+	{
+		sortedGames.ForEach(g =>
+		{
+			var ts = DateTime.Now - DateTime.Parse(g.StartTime);
+			if(g.StartTime != null && ts.TotalDays >= 7)
+				Instance.RemoveGame(g.StartTime);
+		});
+	}
+
+	private void AddOrUpdateGame(GameItem game)
+	{
+		var existingGame = SessionGames.FirstOrDefault(x => x?.StartTime == game.StartTime);
+		if(existingGame == null)
+		{
+			SessionGames.Add(new BattlegroundsGameViewModel(game));
+		}
+	}
+
+	[LocalizedProp]
+	public string AvailableMinionTypesHeaderLabel =>
+		(_availableMinionTypesSectionVisibility == Visibility.Visible, _bannedMinionTypesSectionVisibility == Visibility.Visible) switch
+		{
+			(true, false) => LocUtil.Get("Battlegrounds_Session_Header_Label_Minions_Available"),
+			(false, true) => LocUtil.Get("Battlegrounds_Session_Header_Label_Minions_Banned"),
+			_ => LocUtil.Get("Battlegrounds_Session_Header_Label_Minions_MinionTypes"),
+		};
+
+	public Visibility MinionTypesSectionVisibility =>
+		_availableMinionTypesSectionVisibility == Visibility.Visible || _bannedMinionTypesSectionVisibility == Visibility.Visible
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+	public Visibility MinionTypesBorderVisibility=>
+		_availableMinionTypesSectionVisibility == Visibility.Visible && _bannedMinionTypesSectionVisibility == Visibility.Visible
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+	public Visibility CompStatsSectionVisibility =>
+		_availableMinionTypesSectionVisibility == Visibility.Visible || _bannedMinionTypesSectionVisibility == Visibility.Visible
+			? Visibility.Visible
+			: Visibility.Collapsed;
+
+	private Visibility _availableCompStatsSectionVisibility;
+	public Visibility AvailableCompStatsSectionVisibility
+	{
+		get => _availableCompStatsSectionVisibility;
+		set
+		{
+			_availableCompStatsSectionVisibility = value;
+			OnPropertyChanged();
+			OnPropertyChanged(nameof(CompStatsSectionVisibility));
+			Core.Windows.BattlegroundsSessionWindow.UpdateBattlegroundsSessionLayoutHeight();
+		}
+	}
+
+	private Visibility _availableMinionTypesSectionVisibility;
+	public Visibility AvailableMinionTypesSectionVisibility
+	{
+		get => _availableMinionTypesSectionVisibility;
+		set
+		{
+			_availableMinionTypesSectionVisibility = value;
+			OnPropertyChanged();
+			OnPropertyChanged(nameof(MinionTypesSectionVisibility));
+			OnPropertyChanged(nameof(AvailableMinionTypesHeaderLabel));
+			OnPropertyChanged(nameof(MinionTypesBorderVisibility));
+		}
+	}
+
+	private Visibility _bannedMinionTypesSectionVisibility;
+	public Visibility BannedMinionTypesSectionVisibility
+	{
+		get => _bannedMinionTypesSectionVisibility;
+		set
+		{
+			_bannedMinionTypesSectionVisibility = value;
+			OnPropertyChanged();
+			OnPropertyChanged(nameof(MinionTypesSectionVisibility));
+			OnPropertyChanged(nameof(AvailableMinionTypesHeaderLabel));
+			OnPropertyChanged(nameof(MinionTypesBorderVisibility));
+		}
+	}
+
+	private Visibility _minionTypesBodyVisibility;
+	public Visibility MinionTypesBodyVisibility
+	{
+		get => _minionTypesBodyVisibility;
+		set
+		{
+			_minionTypesBodyVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _compStatsErrorVisibility = Visibility.Hidden;
+
+	public Visibility CompStatsErrorVisibility
+	{
+		get => _compStatsErrorVisibility;
+		set
+		{
+			_compStatsErrorVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _compStatsWaitingMsgVisibility;
+	public Visibility CompStatsWaitingMsgVisibility
+	{
+		get => _compStatsWaitingMsgVisibility;
+		set
+		{
+			_compStatsWaitingMsgVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _compStatsBodyVisibility = Visibility.Hidden;
+	public Visibility CompStatsBodyVisibility
+	{
+		get => _compStatsBodyVisibility;
+		set
+		{
+			_compStatsBodyVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _minionTypesWaitingMsgVisibility;
+	public Visibility MinionTypesWaitingMsgVisibility
+	{
+		get => _minionTypesWaitingMsgVisibility;
+		set
+		{
+			_minionTypesWaitingMsgVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private string? _bgRatingStart;
+	public string? BgRatingStart
+	{
+		get => _bgRatingStart;
+		set
+		{
+			_bgRatingStart = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private string? _bgRatingCurrent;
+	public string? BgRatingCurrent
+	{
+		get => _bgRatingCurrent;
+		set
+		{
+			_bgRatingCurrent = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _gridHeaderVisibility;
+	public Visibility GridHeaderVisibility
+	{
+		get => _gridHeaderVisibility;
+		set
+		{
+			_gridHeaderVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _gamesEmptyStateVisibility;
+	public Visibility GamesEmptyStateVisibility
+	{
+		get => _gamesEmptyStateVisibility;
+		set
+		{
+			_gamesEmptyStateVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _bgStartCurrentMMRSectionVisibility;
+	public Visibility BgStartCurrentMMRSectionVisibility
+	{
+		get => _bgStartCurrentMMRSectionVisibility;
+		set
+		{
+			_bgStartCurrentMMRSectionVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	private Visibility _bgLatestGamesSectionVisibility;
+	public Visibility BgLatestGamesSectionVisibility
+	{
+		get => _bgLatestGamesSectionVisibility;
+		set
+		{
+			_bgLatestGamesSectionVisibility = value;
+			OnPropertyChanged();
+		}
+	}
+
+	public void SetBattlegroundsCompositionStatsViewModel(List<BattlegroundsCompStats.LobbyComp> compsData)
+	{
+		var compStatsOrdered = compsData.OrderByDescending(c => c.Popularity).ToList();
+		if(compStatsOrdered.Any())
+		{
+			var max = Math.Max(Math.Ceiling(compStatsOrdered[0].Popularity), 40);
+			CompositionStats = compStatsOrdered
+				.Where(comp => comp.Id != -1 && comp.Name != null)
+				.Select(comp => {
+					var minionDbfId = comp.KeyMinionsTop3 == null || !comp.KeyMinionsTop3.Any() ? 59201 : comp.KeyMinionsTop3.First();
+					return new BattlegroundsCompositionStatsRowViewModel(
+						comp.Name,
+						minionDbfId,
+						comp.Popularity,
+						comp.AvgFinalPlacement,
+						max
+					);
+				});
+		}
+	}
+
+	public IEnumerable<BattlegroundsCompositionStatsRowViewModel>? CompositionStats
+	{
+		get => GetProp<IEnumerable<BattlegroundsCompositionStatsRowViewModel>?>(null);
+		set => SetProp(value);
+	}
+
+	#region Mode
+	public SelectedBattlegroundsGameMode BattlegroundsGameMode
+	{
+		get
+		{
+			return GetProp(SelectedBattlegroundsGameMode.UNKNOWN);
+		}
+		set
+		{
+			// the client reports UNKNOWN whenever the lobby is not showing (during a game, in another
+			// scene) and the watcher coerces failed mirror reads to it too, so it never tells us which
+			// mode the player is in. Keeping the last mode we actually saw avoids falling back to Solos.
+			if(value == SelectedBattlegroundsGameMode.UNKNOWN)
+				return;
+
+			var modified = GetProp(SelectedBattlegroundsGameMode.UNKNOWN) != value;
+			SetProp(value);
+			if(modified)
+			{
+				UpdateSectionsVisibilities();
+				UpdateCompositionStatsVisibility();
+				Update();
+			}
+		}
+	}
+	#endregion
+}

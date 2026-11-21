@@ -1,0 +1,69 @@
+﻿<UserControl x:Class="Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Guides.Comps.CompButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:battlegrounds="clr-namespace:Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:hearthstoneDeckTracker="clr-namespace:Hearthstone_Deck_Tracker"
+             mc:Ignorable="d"
+             d:DesignHeight="300" d:DesignWidth="300">
+    <battlegrounds:OverlayButton Cursor="Hand" DataContext="{Binding}" Height="48" Margin="0" Padding="0" Click="Button_OnClick">
+        <Grid>
+            <Rectangle>
+                <Rectangle.Style>
+                    <Style TargetType="Rectangle">
+                        <Setter Property="Opacity" Value="0.2" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=battlegrounds:OverlayButton}}" Value="True">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Rectangle.Style>
+                <Rectangle.Fill>
+                    <ImageBrush
+                        x:Name="ImgBrush"
+                        ImageSource="{Binding CardAsset.Asset}" Stretch="None">
+                        <ImageBrush.Transform>
+                            <TranslateTransform X="-30" Y="0" />
+                        </ImageBrush.Transform>
+                    </ImageBrush>
+                </Rectangle.Fill>
+                <Rectangle.OpacityMask>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0.70,0">
+                        <GradientStop Color="#292d30" Offset="0.5"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </LinearGradientBrush>
+                </Rectangle.OpacityMask>
+            </Rectangle>
+            <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <hearthstoneDeckTracker:OutlinedTextBlock
+                    Margin="10,0,10,0"
+                    Text="{Binding CompGuide.Name}"
+                    FontSize="12"
+                    TextWrapping="Wrap"
+                    TextTrimming="None"
+                    FontFamily="/BattlegroundsTracker;component/Resources/#Chunkfive"
+                />
+                <Path
+                    Grid.Column="1"
+                    Width="9"
+                    Height="9"
+                    Stretch="Fill"
+                    Fill="White"
+                    Margin="0,0,14,0"
+                    RenderTransformOrigin="0.5,0.5"
+                    Data="M5.06055 8.49219L5.18359 8.36914C5.27148 8.28125 5.27148 8.1582 5.18359 8.07031L2.05469 4.92383H8.66406C8.76953 4.92383 8.875 4.83594 8.875 4.71289V4.53711C8.875 4.43164 8.76953 4.32617 8.66406 4.32617H2.05469L5.18359 1.19727C5.27148 1.10938 5.27148 0.986328 5.18359 0.898438L5.06055 0.775391C4.97266 0.6875 4.84961 0.6875 4.76172 0.775391L1.05273 4.48438C0.964844 4.57227 0.964844 4.69531 1.05273 4.7832L4.76172 8.49219C4.84961 8.58008 4.97266 8.58008 5.06055 8.49219Z">
+                    <Path.RenderTransform>
+                        <ScaleTransform ScaleX="-1" />
+                    </Path.RenderTransform>
+                </Path>
+            </Grid>
+        </Grid>
+    </battlegrounds:OverlayButton>
+</UserControl>
+

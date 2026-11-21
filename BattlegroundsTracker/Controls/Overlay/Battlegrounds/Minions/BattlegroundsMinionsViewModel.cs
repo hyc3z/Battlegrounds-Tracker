@@ -1,0 +1,663 @@
+﻿using System.Collections.Generic;
+using System.Linq;
+using HearthDb.Enums;
+using Hearthstone_Deck_Tracker.Utility.MVVM;
+using Hearthstone_Deck_Tracker.Hearthstone;
+using System;
+using System.Windows;
+using System.Windows.Input;
+using Hearthstone_Deck_Tracker.Commands;
+using Hearthstone_Deck_Tracker.Controls.Tooltips;
+using Hearthstone_Deck_Tracker.Utility.Assets;
+using Hearthstone_Deck_Tracker.Utility.Battlegrounds;
+using Hearthstone_Deck_Tracker.Utility.Extensions;
+
+namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Minions;
+
+public class BattlegroundsMinionsViewModel : ViewModel
+{
+	private BattlegroundsDb Db => IsPreLobby ? BattlegroundsDbSingleton.Get(IsDuos) : BattlegroundsDbSingleton.Current;
+
+	public BattlegroundsMinionsViewModel()
+	{
+		BattlegroundsDbSingleton.Updated += isDuos =>
+		{
+			if(IsPreLobby && IsDuos == isDuos)
+				OnMinionPoolChanged();
+		};
+	}
+
+	public void OnMinionPoolChanged()
+	{
+		OnPropertyChanged(nameof(Groups));
+		OnPropertyChanged(nameof(MinionTypeButtons));
+		UpdateTierButtons();
+		OnPropertyChanged(nameof(UnavailableRaces));
+		OnPropertyChanged(nameof(UnavailableMinionTypesVisibility));
+	}
+
+	public IEnumerable<Race>? AvailableRaces
+	{
+		get => GetProp<IEnumerable<Race>?>(null);
+		set
+		{
+			SetProp(value);
+			if(ActiveMinionKeyword is { } keyword && !AvailableKeywords.Contains(keyword))
+				ActiveMinionKeyword = null;
+			UpdateTierButtons();
+			OnPropertyChanged(nameof(Groups));
+			OnPropertyChanged(nameof(MinionTypeButtons));
+			OnPropertyChanged(nameof(KeywordButtons));
+			OnPropertyChanged(nameof(UnavailableRaces));
+			OnPropertyChanged(nameof(UnavailableMinionTypesVisibility));
+		}
+	}
+
+	public List<Race> UnavailableRaces
+	{
+		get => AvailableRaces is null ? new List<Race>() : Db.Races.Where(x => !AvailableRaces.Contains(x) && x != Race.INVALID && x != Race.ALL).ToList();
+	}
+
+	public int? ActiveTier
+	{
+		get => GetProp<int?>(null);
+		set
+		{
+			SetProp(value);
+			if(value != null)
+			{
+				ActiveMinionType = null;
+				ActiveMinionKeyword = null;
+			}
+			UpdateTierButtons();
+			OnPropertyChanged(nameof(KeywordButtons));
+			OnPropertyChanged(nameof(Groups));
+			OnPropertyChanged(nameof(UnavailableMinionTypesVisibility));
+		}
+	}
+
+	public Race? ActiveMinionType
+	{
+		get => GetProp<Race?>(null);
+		set
+		{
+			SetProp(value);
+			if(value != null)
+			{
+				ActiveTier = null;
+				ActiveMinionKeyword = null;
+			}
+			UpdateTierButtons();
+			OnPropertyChanged(nameof(KeywordButtons));
+			OnPropertyChanged(nameof(MinionTypeButtons));
+			OnPropertyChanged(nameof(IsFilterButtonVisible));
+			OnPropertyChanged(nameof(IsExtraFilterSelected));
+			OnPropertyChanged(nameof(Groups));
+			OnPropertyChanged(nameof(UnavailableMinionTypesVisibility));
+		}
+	}
+
+	public BattlegroundsKeyword? ActiveMinionKeyword
+	{
+		get => GetProp<BattlegroundsKeyword?>(null);
+		set
+		{
+			SetProp(value);
+			if(value != null)
+			{
+				ActiveMinionType = null;
+				ActiveTier = null;
+			}
+			UpdateTierButtons();
+			OnPropertyChanged(nameof(KeywordButtons));
+			OnPropertyChanged(nameof(IsFilterButtonVisible));
+			OnPropertyChanged(nameof(IsExtraFilterSelected));
+			OnPropertyChanged(nameof(Groups));
+			OnPropertyChanged(nameof(UnavailableMinionTypesVisibility));
+		}
+	}
+
+	public bool IsDuos
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			if(IsPreLobby)
+				OnMinionPoolChanged();
+			else
+				OnPropertyChanged(nameof(Groups));
+		}
+	}
+
+	public bool IsInspirationEnabled
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(Groups));
+		}
+	}
+
+	public string? Anomaly
+	{
+		get => GetProp<string?>(null);
+		set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(AvailableTiers));
+			UpdateTierButtons();
+			OnPropertyChanged(nameof(KeywordButtons));
+			OnPropertyChanged(nameof(Groups));
+		}
+	}
+
+	public bool HasTier7HeroPower
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			UpdateTavernTier7Visibility();
+		}
+	}
+
+	public bool HasTier7Trinket
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			UpdateTavernTier7Visibility();
+		}
+	}
+	public bool HasTier7QuestReward
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			UpdateTavernTier7Visibility();
+		}
+	}
+
+	public bool IsPreLobby
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			UpdateTavernTier7Visibility();
+		}
+	}
+
+	private bool HasTier7Minion => Db.GetCardsByRaces(AvailableRaces?.ToList() ?? Db.Races.ToList(), IsDuos)
+		.Any(x => x.Id == HearthDb.CardIds.NonCollectible.Neutral.GreedyConniver);
+
+	private bool ShowTavernTier7 => IsPreLobby || Config.Instance.AlwaysShowBattlegroundsTavernTier7 || HasTier7HeroPower || HasTier7Trinket || HasTier7QuestReward || HasTier7Minion;
+
+	public void UpdateTavernTier7Visibility()
+	{
+		OnPropertyChanged(nameof(AvailableTiers));
+		UpdateTierButtons();
+		OnPropertyChanged(nameof(KeywordButtons));
+		OnPropertyChanged(nameof(Groups));
+		OnPropertyChanged(nameof(ShowTavernTier7));
+	}
+
+	public class TierButton : ViewModel, ICardTooltip
+	{
+		public int Tier { get; init; }
+		public bool Active
+		{
+			get => GetProp(false);
+			set
+			{
+				SetProp(value);
+				OnPropertyChanged(nameof(ShowDarkParadoxTooltip));
+			}
+		}
+
+		public bool Available { get => GetProp(false); set => SetProp(value); }
+		public bool Faded { get => GetProp(false); set => SetProp(value); }
+
+		public Hearthstone.Card? DarkParadox
+		{
+			get => GetProp<Hearthstone.Card?>(null);
+			set
+			{
+				SetProp(value);
+				OnPropertyChanged(nameof(HasDarkParadox));
+				OnPropertyChanged(nameof(ShowDarkParadoxTooltip));
+			}
+		}
+
+		public bool HasDarkParadox => DarkParadox != null;
+
+		// the open tier already lists the Dark Paradox
+		public bool ShowDarkParadoxTooltip => HasDarkParadox && !Active;
+
+		public void UpdateTooltip(CardTooltipViewModel viewModel) => viewModel.Card = DarkParadox;
+
+		public int Size { get => GetProp(38); set => SetProp(value); }
+	}
+
+	// outside of a match no tier is gated behind an anomaly, hero power or trinket
+	public List<int> AvailableTiers => IsPreLobby
+		? new List<int> { 1, 2, 3, 4, 5, 6, 7 }
+		: BattlegroundsUtils.GetAvailableTiers(Anomaly).ToList();
+
+	private List<TierButton>? _tierButtons;
+
+	public List<TierButton> TierButtons => _tierButtons ??= CreateTierButtons();
+
+	private List<int> VisibleTiers
+	{
+		get
+		{
+			var tiers = Enumerable.Range(1, 6).ToList();
+			if(AvailableTiers.Contains(7) || ShowTavernTier7)
+				tiers.Add(7);
+			return tiers;
+		}
+	}
+
+	private List<TierButton> CreateTierButtons()
+	{
+		var buttons = VisibleTiers.Select(tier => new TierButton { Tier = tier }).ToList();
+		ApplyTierButtonState(buttons);
+		return buttons;
+	}
+
+	// replacing the buttons would recreate the one under the mouse, which drops its hover state and tooltip
+	private void UpdateTierButtons()
+	{
+		if(_tierButtons == null || !_tierButtons.Select(x => x.Tier).SequenceEqual(VisibleTiers))
+		{
+			_tierButtons = null;
+			OnPropertyChanged(nameof(TierButtons));
+			return;
+		}
+		ApplyTierButtonState(_tierButtons);
+	}
+
+	private void ApplyTierButtonState(List<TierButton> buttons)
+	{
+		var darkParadox = Db.DarkParadox;
+		var darkParadoxTier = Db.DarkParadoxTier;
+		var availableTiers = AvailableTiers;
+		foreach(var button in buttons)
+		{
+			button.Active = button.Tier == ActiveTier;
+			button.Available = availableTiers.Contains(button.Tier);
+			button.Faded = (ActiveTier != null && ActiveTier != button.Tier) || IsExtraFilterSelected;
+			if(darkParadoxTier != button.Tier)
+				button.DarkParadox = null;
+			else if(button.DarkParadox?.DbfId != darkParadox?.DbfId)
+				button.DarkParadox = darkParadox;
+			button.Size = buttons.Count == 7 ? 33 : 38;
+		}
+	}
+
+	public List<BattlegroundsKeyword> AvailableKeywords => BattlegroundsUtils.GetAvailableKeywords(AvailableRaces);
+
+	public class KeywordButton
+	{
+		public BattlegroundsKeyword Keyword { get; set; } = null!;
+		public string KeywordName => Keyword.Name;
+
+		public bool Active { get; set; }
+		public bool Faded { get; set; }
+		public int Size { get; set; }
+	}
+
+	public List<KeywordButton> KeywordButtons
+	{
+		get
+		{
+			return AvailableKeywords.Select(x => new KeywordButton()
+			{
+				Keyword = x,
+				Active = x == ActiveMinionKeyword,
+				Faded = ActiveMinionKeyword != null && ActiveMinionKeyword != x,
+				Size = 38
+			}).ToList();
+		}
+	}
+
+	public class MinionTypeButton
+	{
+		public Race MinionType { get; set; }
+		public bool Active { get; set; }
+		public bool Available { get; set; }
+		public bool Faded { get; set; }
+
+		public int Size { get; set; }
+	}
+
+	public List<MinionTypeButton> MinionTypeButtons
+	{
+		get
+		{
+			var races = (AvailableRaces ?? Db.Races)
+				.Where(x => x != Race.INVALID && x != Race.ALL) // Don't show ALL
+				.OrderBy(x => HearthDbConverter.GetLocalizedRace(x) ?? string.Empty)
+				.ToList();
+			races.Add(Race.ALL);
+			races.Add(Race.INVALID); // Other
+			races.Add((Race)(-1)); // Spells
+			races.Add((Race)(-2)); // Buddies
+
+			return races.Select(x => new MinionTypeButton()
+			{
+				MinionType = x,
+				Active = x == ActiveMinionType,
+				Available = races.Contains(x),
+				Faded = ActiveMinionType != null && ActiveMinionType != x,
+				Size = 34
+			}).ToList();
+		}
+	}
+
+	public bool IsExtraFilterSelected => ActiveMinionType != null || ActiveMinionKeyword != null;
+	public bool IsFilterButtonVisible => ActiveMinionType != null || ActiveMinionKeyword != null || IsFilterRegionHovered || IsFiltersOpen;
+
+
+	public bool IsFilterRegionHovered
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(IsFilterButtonVisible));
+		}
+	}
+
+	public class CardGroup
+	{
+		public int Tier { get; set;  }
+
+		/// <summary>
+		/// The minion type or -1 for spells
+		/// </summary>
+		public Race MinionType { get; set; }
+
+		public bool GroupedByMinionType { get; set; } = false;
+
+		public BattlegroundsKeyword? Keyword { get; set; }
+
+		public bool GroupedByKeyword { get; set; } = false;
+
+		public IEnumerable<Hearthstone.Card> Cards { get; set; } = new List<Hearthstone.Card>();
+
+		public bool IsInspirationEnabled { get; set; }
+
+		public bool IsPinEnabled { get; set; }
+
+	}
+
+	// a trial from the previous match must not carry over, and nothing can be pinned outside a match
+	private bool ShowInspirationButtons => IsInspirationEnabled && !IsPreLobby;
+	private bool ShowPinButtons => !IsPreLobby;
+
+	// outside of a match any game can roll a Dark Paradox, so its tier is never known
+	private Hearthstone.Card? UnknownDarkParadox
+	{
+		get
+		{
+			const string darkParadoxId = HearthDb.CardIds.NonCollectible.Neutral.DarkParadox;
+			if(!IsPreLobby)
+				return Db.DarkParadox is { Id: darkParadoxId } darkParadox ? darkParadox : null;
+			return HearthDb.Cards.All.TryGetValue(darkParadoxId, out var card) ? new Hearthstone.Card(card, true) : null;
+		}
+	}
+
+	public IEnumerable<CardGroup> Groups
+	{
+		get
+		{
+			var groups = new List<CardGroup>();
+			if(ActiveTier is int tier)
+			{
+				var isTierAvailable = AvailableTiers.Contains(tier);
+
+				foreach(var race in AvailableRaces ?? Db.Races)
+				{
+					IEnumerable<Hearthstone.Card> cards = Db.GetCards(tier, race, IsDuos);
+
+					if(!cards.Any())
+						continue;
+
+					groups.Add(new CardGroup
+					{
+						Tier = tier,
+						MinionType = race,
+						Cards = cards.OrderBy(x => x.LocalizedName),
+						IsInspirationEnabled = ShowInspirationButtons,
+						IsPinEnabled = ShowPinButtons,
+					});
+				}
+
+				IEnumerable<Hearthstone.Card> spells = Db.GetSpells(tier, IsDuos);
+				if(spells.Any())
+				{
+					spells = spells.Select(x =>
+					{
+						if(isTierAvailable)
+							return x;
+
+						var ret = (Hearthstone.Card)x.Clone();
+						ret.Count = 0;
+						return ret;
+					});
+
+					groups.Add(new CardGroup
+					{
+						Tier = tier,
+						MinionType = (Race)(-1), // Spells are encoded as a -1 race
+						Cards = spells.OrderBy(x => x.Cost).ThenBy(x => x.LocalizedName),
+						IsInspirationEnabled = ShowInspirationButtons,
+						IsPinEnabled = ShowPinButtons,
+					});
+				}
+
+				return groups
+					.OrderBy(x =>
+						(x.MinionType) switch
+						{
+							Race.ALL => -1, // Always first
+							Race.INVALID => 1, // Other
+							(Race)(-1) => 2, // Spells
+							_ => 0, // Minion Types
+						}
+					)
+					.ThenBy(x => HearthDbConverter.GetLocalizedRace(x.MinionType) ?? string.Empty);
+			}
+			else if(ActiveMinionType is Race minionType)
+			{
+				var tiers = AvailableTiers;
+				if(ShowTavernTier7 && !tiers.Contains(7))
+					tiers.Add(7);
+				foreach(var tierGroup in tiers)
+				{
+					var cards = new List<Hearthstone.Card>();
+
+					// Spells
+					if ((int)minionType == -1)
+					{
+						cards = Db.GetSpells(tierGroup, IsDuos)
+							.OrderBy(x => x.Cost)
+							.ThenBy(x => x.LocalizedName)
+							.ToList();
+					}
+					// Buddies
+					else if ((int)minionType == -2)
+					{
+
+						cards = Db.GetBuddies(tierGroup, IsDuos)
+							.OrderBy(x => x.LocalizedName)
+							.ToList();
+					}
+					else
+					{
+						// Get minion cards of the specified type
+						var typeCards = Db.GetCards(tierGroup, minionType, IsDuos);
+
+						// Add neutral cards (Race.ALL) if needed
+						if (minionType != Race.ALL && minionType != Race.INVALID)
+						{
+							var neutralCards = Db.GetCards(tierGroup, Race.ALL, IsDuos);
+							cards = typeCards.Concat(neutralCards).OrderBy(x => x.LocalizedName).ToList();
+						}
+						else
+						{
+							cards = typeCards.OrderBy(x => x.LocalizedName).ToList();
+						}
+					}
+
+					if(!cards.Any())
+						continue;
+
+					groups.Add(new CardGroup
+					{
+						Tier = tierGroup,
+						MinionType = minionType,
+						GroupedByMinionType = true,
+						Cards = cards,
+						IsInspirationEnabled = ShowInspirationButtons,
+						IsPinEnabled = ShowPinButtons,
+					});
+				}
+
+				if(minionType == Race.ALL && UnknownDarkParadox is { } darkParadox)
+				{
+					groups.Insert(0, new CardGroup
+					{
+						Tier = 0,
+						MinionType = minionType,
+						GroupedByMinionType = true,
+						Cards = new[] { darkParadox },
+						IsInspirationEnabled = ShowInspirationButtons,
+						IsPinEnabled = ShowPinButtons,
+					});
+				}
+			}
+			else if(ActiveMinionKeyword is { } activeMinionKeyword)
+			{
+				var tiers = AvailableTiers;
+				if(ShowTavernTier7 && !tiers.Contains(7))
+					tiers.Add(7);
+				foreach(var tierGroup in tiers)
+				{
+					var cards =  Db.GetCards(tierGroup, activeMinionKeyword, AvailableRaces ?? Db.Races, IsDuos)
+							.OrderBy(x => x.LocalizedName).ToList();
+
+					if(!cards.Any())
+						continue;
+
+					groups.Add(new CardGroup
+					{
+						Tier = tierGroup,
+						Keyword = activeMinionKeyword,
+						GroupedByKeyword = true,
+						Cards = cards,
+						IsInspirationEnabled = ShowInspirationButtons,
+						IsPinEnabled = ShowPinButtons,
+					});
+				}
+
+				IEnumerable<Hearthstone.Card> spells = Db.GetSpells(activeMinionKeyword, IsDuos);
+				if(spells.Any())
+				{
+					groups.Add(new CardGroup
+					{
+						Tier = 0,
+						Keyword = activeMinionKeyword,
+						MinionType = (Race)(-1), // Spells are encoded as a -1 race
+						Cards = spells.OrderBy(x => x.Cost).ThenBy(x => x.LocalizedName),
+						GroupedByKeyword = true,
+						IsInspirationEnabled = ShowInspirationButtons,
+						IsPinEnabled = ShowPinButtons,
+					});
+				}
+			}
+
+			return groups;
+		}
+	}
+
+	public void OnHeroPowers(IEnumerable<string> heroPowers)
+	{
+		HasTier7HeroPower = heroPowers.Any(
+			x => x is HearthDb.CardIds.NonCollectible.Neutral.ThorimStormlord_ChooseYourChampion
+		);
+	}
+
+	public void OnTrinkets(IEnumerable<string> trinkets)
+	{
+		HasTier7Trinket = trinkets.Any(
+			x => x is HearthDb.CardIds.NonCollectible.Neutral.PaglesFishingRod
+				or HearthDb.CardIds.NonCollectible.Neutral.Kaleidoscope
+				or HearthDb.CardIds.NonCollectible.Neutral.Kaleidoscope_KaleidoscopeToken
+				or HearthDb.CardIds.NonCollectible.Neutral.WaxLance
+		);
+	}
+
+	public void OnQuests(IEnumerable<string> quests)
+	{
+		var questList = quests?.ToList() ?? new List<string>();
+		HasTier7QuestReward = questList.Contains(HearthDb.CardIds.NonCollectible.Neutral.NorgannonsReward);
+	}
+
+	public Visibility UnavailableMinionTypesVisibility => ActiveTier is null || ActiveMinionType != null || ActiveMinionKeyword != null || !UnavailableRaces.Any() ? Visibility.Collapsed : Visibility.Visible;
+
+	public ICommand FilterClickCommand => new Command(() =>
+	{
+		IsFiltersOpen = !IsFiltersOpen;
+		if(IsFiltersOpen)
+			Core.Game.Metrics.BattlegroundsBrowserOpenFilterPanelClicks++;
+	});
+
+	public bool IsFiltersOpen
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(IsFilterButtonVisible));
+		}
+	}
+
+	public void Reset()
+	{
+		IsPreLobby = false;
+		AvailableRaces = null;
+		ActiveTier = null;
+		ActiveMinionType = null;
+		ActiveMinionKeyword = null;
+		IsDuos = false;
+		Anomaly = null;
+		HasTier7HeroPower = false;
+		HasTier7Trinket = false;
+		HasTier7QuestReward = false;
+		IsInspirationEnabled = false;
+	}
+
+	private bool _preloadedCardTiles;
+	public void PreloadCardTiles()
+	{
+		if(_preloadedCardTiles)
+			return;
+		_preloadedCardTiles = true;
+		var downloader = AssetDownloaders.cardTileDownloader;
+		if(downloader == null)
+			return;
+
+		var races = Enum.GetValues(typeof(Race)).Cast<Race>();
+		foreach(var tier in new [] { 1, 2, 3, 4, 5, 6, 7 })
+			foreach(var race in races)
+				foreach(var card in Db.GetCards(tier, race, true))
+					downloader.GetAssetData(card).Forget();
+	}
+}

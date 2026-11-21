@@ -1,0 +1,236 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using HearthDb.Enums;
+using Hearthstone_Deck_Tracker.Controls.Overlay;
+using Hearthstone_Deck_Tracker.Enums;
+using Hearthstone_Deck_Tracker.Hearthstone.CounterSystem.Settings;
+using Hearthstone_Deck_Tracker.Hearthstone.Entities;
+using Hearthstone_Deck_Tracker.LogReader.Interfaces;
+using Hearthstone_Deck_Tracker.Utility.Battlegrounds;
+
+namespace Hearthstone_Deck_Tracker.Hearthstone.CounterSystem;
+
+public abstract class BaseCounter : INotifyPropertyChanged
+{
+	protected GameV2 Game { get; }
+	public bool IsPlayerCounter { get; }
+
+	public virtual string LocalizedName => CardDisplayName ?? FallbackDisplayName;
+
+	public virtual bool UsesFallbackDisplayName => CardDisplayName == null;
+
+	private string? CardDisplayName => Database.GetCardFromId(CardIdToShowInUI)?.LocalizedName;
+
+	private string FallbackDisplayName
+	{
+		get
+		{
+			var name = GetType().Name;
+			return name.EndsWith("Counter") && name.Length > "Counter".Length
+				? name.Substring(0, name.Length - "Counter".Length)
+				: name;
+		}
+	}
+
+	protected virtual string? CardIdToShowInUI { get; }
+
+	public abstract string[] RelatedCards { get; }
+
+	public virtual bool IsBattlegroundsCounter => false;
+
+	public string CounterId => GetType().Name;
+
+	public virtual bool IsAvailableInCurrentGameMode =>
+		IsBattlegroundsCounter ? Game.IsBattlegroundsMatch : Game.IsTraditionalHearthstoneMatch;
+
+	public CounterVisibility VisibilityOverride =>
+		CounterVisibilitySettings.Instance.Get(CounterId, IsPlayerCounter);
+
+	/// <summary>
+	/// Final visibility for this counter: the game-mode gate, then the user's override, then the
+	/// counter's own heuristic.
+	/// </summary>
+	public bool IsVisible()
+	{
+		if(!IsAvailableInCurrentGameMode)
+			return false;
+
+		return VisibilityOverride switch
+		{
+			CounterVisibility.Disabled => false,
+			CounterVisibility.Enabled => true,
+			_ => ShouldShow() || MirrorsPlayerDeckKnowledge,
+		};
+	}
+
+	/// <summary>
+	/// Opponent counters normally have to guess from the opponent's class and the format, because we
+	/// cannot see their deck. Azalina Soulsever copies half of our deck into theirs, so a payoff
+	/// sitting in our deck becomes a payoff they may hold too — judge those counters with the player's
+	/// deck knowledge on top of their own heuristic.
+	/// </summary>
+	protected bool MirrorsPlayerDeckKnowledge =>
+		!IsPlayerCounter
+		&& MirrorsPlayerDeck
+		&& Game.IsTraditionalHearthstoneMatch
+		&& Game.Opponent.DeckCopiedFromEnemy
+		&& HasValue
+		&& InPlayerDeckOrKnown(RelatedCards);
+
+	/// <summary>
+	/// Whether this counter takes part in the mirroring above. Opt out for counters that are
+	/// deliberately player-only.
+	/// </summary>
+	protected virtual bool MirrorsPlayerDeck => true;
+
+	protected abstract bool HasValue { get; }
+
+	protected BaseCounter(bool controlledByPlayer, GameV2 game)
+	{
+		IsPlayerCounter = controlledByPlayer;
+		Game = game;
+	}
+
+	public Card? CardToShowInUi => Database.GetCardFromId(CardIdToShowInUI);
+
+	public CardAssetViewModel CardAsset => new(CardToShowInUi, Utility.Assets.CardAssetType.Portrait);
+
+	public abstract bool ShouldShow();
+
+	public abstract string ValueToShow();
+
+	public abstract string[] GetCardsToDisplay();
+
+	public string CounterValue => ValueToShow();
+
+	public virtual int SortValue => 0;
+
+	public virtual bool IsDisplayValueLong => false;
+
+	public virtual void HandleTagChange(GameTag tag, IHsGameState gameState, Entity entity, int value, int prevValue){}
+
+	public virtual void HandleChoicePicked(IHsCompletedChoice choice){}
+
+	private bool InDeckOrKnown(string cardId)
+	{
+		var activeDeck = DeckList.Instance.ActiveDeck;
+		var deckContains = activeDeck?.Cards.Any(x => x.Id == cardId) ?? false;
+		var sideboardsContain = activeDeck?.Sideboards.Any(sb => sb.Cards.Any(x => x.Id == cardId)) ?? false;
+
+		var playerEntitiesContains = Game.Player.PlayerEntities.Any(x =>
+			x.CardId == cardId &&
+			x.Info.OriginalZone != null &&
+			// non-picked discover option entities now go to the graveyard
+			x is { IsInSetAside: false, IsInGraveyard: false }
+		);
+
+		var discoverEntitiesContains = Game.Player.OfferedEntities.Any(x => x.CardId == cardId);
+
+		return deckContains || sideboardsContain || playerEntitiesContains || discoverEntitiesContains;
+	}
+
+	protected bool InPlayerDeckOrKnown(string[] cardIds) => cardIds.Any(InDeckOrKnown);
+
+	protected List<string> GetCardsInDeckOrKnown(string[] cardIds)
+	{
+		var knownCards = new List<string>();
+		foreach (var cardId in cardIds)
+		{
+			if (InDeckOrKnown(cardId))
+			{
+				knownCards.Add(cardId);
+			}
+		}
+		return knownCards;
+	}
+
+	protected bool OpponentMayHaveRelevantCards(bool ignoreNeutral = false) => FilterCardsByClassAndFormat(RelatedCards, Game.Opponent.OriginalClass, ignoreNeutral).Length > 0;
+
+	protected string[] FilterCardsByClassAndFormat(string[] cardIds, string? playerClass, bool ignoreNeutral = false)
+	{
+		return cardIds
+			.Select(Database.GetCardFromId)
+			.FilterCardsByFormat(Game.CurrentGameType, Game.CurrentFormatType)!
+			.FilterCardsByPlayerClass(playerClass, ignoreNeutral)
+			.Select(card => card!.Id)
+			.ToArray();
+	}
+
+	private readonly string[] _alwaysAvailableCards = {
+		HearthDb.CardIds.NonCollectible.Neutral.BoonofBeetles_BeetleToken1,
+		HearthDb.CardIds.NonCollectible.Neutral.BloodGem1,
+		HearthDb.CardIds.NonCollectible.Neutral.TwilightHatchling_TwilightWhelpToken
+	};
+
+	private HashSet<int>? _availableCardIds;
+	private BattlegroundsDb? _availableCardIdsDb;
+	private HashSet<int>? GetAvailableCardIds()
+	{
+		var db = BattlegroundsDbSingleton.Current;
+		if (_availableCardIds == null || _availableCardIdsDb != db)
+		{
+			var availableRaces = BattlegroundsUtils.GetAvailableRaces();
+			if (availableRaces == null)
+				return null;
+			var currentRaces = new HashSet<Race>(availableRaces.Concat(new[] { Race.ALL, Race.INVALID }));
+			var availableCards = db.GetCardsByRaces(currentRaces, Core.Game.IsBattlegroundsDuosMatch)
+				.Concat(db.GetSpells(Core.Game.IsBattlegroundsDuosMatch));
+
+			_availableCardIds = new HashSet<int>(availableCards.Select(card => card.DbfId));
+			_availableCardIdsDb = db;
+		}
+		return _availableCardIds;
+	}
+
+	public IEnumerable<Card> CardsToDisplay
+	{
+		get
+		{
+			var availableCardIds = GetAvailableCardIds();
+
+			// The opponent branch of GetCardsToDisplay filters by their class, which would drop the
+			// cards Azalina copied out of our deck and leave the tooltip empty under the pill.
+			var cardIds = MirrorsPlayerDeckKnowledge
+				? GetCardsToDisplay().Concat(GetCardsInDeckOrKnown(RelatedCards)).Distinct()
+				: GetCardsToDisplay();
+
+			foreach(var cardId in cardIds)
+			{
+				var card = Database.GetCardFromId(cardId);
+				if(card == null)
+					continue;
+
+				if(
+					IsBattlegroundsCounter &&
+					availableCardIds != null &&
+					!availableCardIds.Contains(card.DbfId) &&
+					!_alwaysAvailableCards.Contains(cardId)
+				)
+					continue;
+
+				card.BaconCard = IsBattlegroundsCounter;
+				yield return card;
+			}
+		}
+	}
+
+
+	public event EventHandler? CounterChanged;
+
+	public event PropertyChangedEventHandler? PropertyChanged;
+
+	protected void OnCounterChanged()
+	{
+		CounterChanged?.Invoke(this, EventArgs.Empty);
+		OnPropertyChanged(nameof(CounterValue));
+		OnPropertyChanged(nameof(CardsToDisplay));
+	}
+
+	protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+	{
+		PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+	}
+}

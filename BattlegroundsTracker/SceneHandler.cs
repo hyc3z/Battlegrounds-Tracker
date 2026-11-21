@@ -1,0 +1,114 @@
+using HearthMirror.Enums;
+using Hearthstone_Deck_Tracker.Enums.Hearthstone;
+using Hearthstone_Deck_Tracker.Hearthstone;
+using Hearthstone_Deck_Tracker.Utility.RemoteData;
+
+namespace Hearthstone_Deck_Tracker;
+
+/// <summary>
+/// Tracks the Hearthstone scene transitions. Only the scenes relevant to Battlegrounds are handled.
+/// </summary>
+public class SceneHandler
+{
+	public static Mode? LastScene { get; private set; }
+	public static Mode? Scene { get; private set; } // null while transitioning
+	public static Mode? NextScene { get; private set; }
+
+	private static bool? Transitioning = null;
+
+	public static void Reset()
+	{
+		LastScene = null;
+		Scene = null;
+		NextScene = null;
+		Transitioning = null;
+	}
+
+	public static void OnSceneUpdate(Mode prevMode, Mode mode, bool sceneLoaded, bool transitioning, LoadingScreenPhase loadingScreenPhase)
+	{
+		// the loading screen keeps covering the loaded scene until it starts fading it in
+		transitioning = transitioning || loadingScreenPhase is not (LoadingScreenPhase.INVALID or LoadingScreenPhase.FADING_IN);
+
+		if(Transitioning is null || transitioning)
+		{
+			OnSceneTransitionStart(prevMode, mode);
+			Transitioning = true;
+		}
+
+		if(!transitioning && sceneLoaded)
+		{
+			// We settled on a new scene without ever observing the transition start
+			// (e.g. the transitioning frame was missed, or stale state leaked across a
+			// game restart). Run the leave logic for the scene we are coming from so its
+			// overlays get hidden.
+			if(Transitioning == false && Scene != null && Scene != mode)
+				OnSceneTransitionStart(Scene.Value, mode);
+
+			OnSceneTransitionComplete(prevMode, mode);
+			Transitioning = false;
+		}
+	}
+
+	private static void OnSceneTransitionStart(Mode from, Mode to)
+	{
+		LastScene = from;
+		NextScene = to;
+		Scene = null;
+
+		if(from == Mode.BACON)
+		{
+			Core.Overlay.UpdateBattlegroundsSessionVisibility();
+			Core.Overlay.UpdateBattlegroundsGuidesPreLobbyVisibility();
+			Core.Overlay.UpdateTier7PreLobbyVisibility();
+			Watchers.BaconWatcher.Stop();
+		}
+		else if(from == Mode.GAMEPLAY)
+		{
+			BattlegroundsUtils.CancelAvailableRacesWaits();
+			Core.Overlay.UpdateBattlegroundsSessionVisibility();
+			Watchers.BattlegroundsTeammateBoardStateWatcher.Stop();
+			Watchers.BattlegroundsLobbyInfoWatcher.Stop();
+			Watchers.BaconWatcher.Stop();
+			Watchers.BigCardWatcher.Stop();
+			Watchers.ChoicesWatcher.Stop();
+			Watchers.SpecialShopChoicesStateWatcher.Stop();
+			Watchers.DiscoverStateWatcher.Stop();
+			Watchers.MulliganTooltipWatcher.Stop();
+		}
+	}
+
+	private static void OnSceneTransitionComplete(Mode from, Mode to)
+	{
+		NextScene = null;
+		Scene = to;
+
+		if(to == Mode.BACON)
+		{
+			Core.Game.CacheBattlegroundsRatingInfo();
+			Core.Game.BattlegroundsSessionViewModel.Update();
+			Core.Overlay.UpdateBattlegroundsSessionVisibility();
+			Core.Overlay.UpdateBattlegroundsGuidesPreLobbyVisibility();
+			Core.Overlay.UpdateTier7PreLobbyVisibility();
+			Watchers.BaconWatcher.Run();
+			Remote.Config.Load();
+			Remote.BattlegroundsLiveMetaPeriod.Load();
+			Remote.BattlegroundsDuosLiveMetaPeriod.Load();
+		}
+		else if(to == Mode.GAMEPLAY)
+		{
+			Core.Overlay.UpdateBattlegroundsSessionVisibility();
+			Watchers.BigCardWatcher.Run();
+			Watchers.ChoicesWatcher.Run();
+			Watchers.SpecialShopChoicesStateWatcher.Run();
+			Watchers.DiscoverStateWatcher.Run();
+			Watchers.BaconWatcher.Run();
+			Watchers.MulliganTooltipWatcher.Run();
+			Watchers.PlayZoneWatcher.Run();
+		}
+
+		if(from == Mode.BACON && to == Mode.GAMEPLAY)
+		{
+			Core.Overlay.Tier7PreLobbyViewModel.InvalidateUserState();
+		}
+	}
+}

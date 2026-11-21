@@ -1,0 +1,19 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# Runtime data written next to the executable in portable mode
+Logs/
+config.xml
+config.xml.bak
+Crash Reports/
+Crash report*.txt
+
+# Misc
+*.log
+*.tmp

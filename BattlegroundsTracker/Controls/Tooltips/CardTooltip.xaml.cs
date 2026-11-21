@@ -1,0 +1,244 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using HearthDb;
+using HearthDb.Enums;
+using Hearthstone_Deck_Tracker.Controls.Overlay;
+using Hearthstone_Deck_Tracker.Hearthstone;
+using Hearthstone_Deck_Tracker.Hearthstone.RelatedCardsSystem;
+using Hearthstone_Deck_Tracker.Utility;
+using Hearthstone_Deck_Tracker.Utility.Assets;
+using Hearthstone_Deck_Tracker.Utility.MVVM;
+
+namespace Hearthstone_Deck_Tracker.Controls.Tooltips;
+
+public interface ICardTooltip
+{
+	public void UpdateTooltip(CardTooltipViewModel viewModel);
+}
+
+/// <summary>
+/// A Card Tooltip with animations, optional secondary image, and text.
+/// This component requires it's DataContext to implement ICardTooltip.
+/// </summary>
+public partial class CardTooltip : IPlacementAware, IScreenBoundaryAware
+{
+	public CardTooltip()
+	{
+		InitializeComponent();
+	}
+
+	public CardTooltipViewModel ViewModel { get; } = new();
+
+	public void SetPlacement(PlacementMode placement)
+	{
+		ViewModel.ImageDock = placement == PlacementMode.Left ? Dock.Right : Dock.Left;
+	}
+
+	public void SetScreenBoundaryOffset(double x, double y)
+	{
+		var space = (ActualHeight - PrimaryImage.ActualHeight) / 2;
+		var offset = Math.Min(Math.Abs(y), space) * Math.Sign(y);
+		ViewModel.CardImageOffset = new Thickness(0, offset, 0, -offset);
+	}
+
+	private void CardTooltip_OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+	{
+		if(DataContext is ICardTooltip cardTooltip)
+			cardTooltip.UpdateTooltip(ViewModel);
+	}
+}
+
+public class CardTooltipViewModel : ViewModel
+{
+	public Hearthstone.Card? Card
+	{
+		get => GetProp<Hearthstone.Card?>(null);
+		set
+		{
+			SetProp(value);
+			UpdateTooltipCards();
+		}
+	}
+
+	public bool ShowTriple
+	{
+		get => GetProp(false);
+		set
+		{
+			SetProp(value);
+			UpdateTooltipCards();
+		}
+	}
+
+	private void UpdateTooltipCards()
+	{
+		var tripleCard = GetTripleCard();
+		// ONLY_GOLD_IN_GUIDE minions have no normal version, so skip straight to the golden one
+		if(tripleCard != null && Card!.HasTag(GameTag.ONLY_GOLD_IN_GUIDE))
+		{
+			PrimaryCard = tripleCard;
+			SecondaryCard = null;
+		}
+		else
+		{
+			PrimaryCard = Card;
+			SecondaryCard = tripleCard;
+		}
+	}
+
+	private Hearthstone.Card? GetTripleCard()
+	{
+		if(!ShowTriple || Card is not { BaconCard: true } || !Cards.NormalToTripleCardIds.TryGetValue(Card.Id, out var tripleId))
+			return null;
+		var tripleCard = Database.GetCardFromId(tripleId);
+		if(tripleCard != null)
+		{
+			tripleCard.BaconCard = true;
+			tripleCard.BaconTriple = true;
+		}
+		return tripleCard;
+	}
+
+	public Hearthstone.Card? PrimaryCard
+	{
+		get => GetProp<Hearthstone.Card?>(null);
+		private set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(AssetViewModel));
+		}
+	}
+
+	public Hearthstone.Card? SecondaryCard
+	{
+		get => GetProp<Hearthstone.Card?>(null);
+		set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(SecondaryAssetViewModel));
+		}
+	}
+
+	public CardAssetType CardAssetType
+	{
+		get => GetProp(CardAssetType.FullImage);
+		set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(AssetViewModel));
+			OnPropertyChanged(nameof(SecondaryAssetViewModel));
+		}
+	}
+
+	public CardAssetViewModel AssetViewModel
+	{
+		get
+		{
+			var value = GetProp<CardAssetViewModel?>(null);
+			if(value == null || value.Card?.Id != PrimaryCard?.Id || value.CardAssetType != CardAssetType)
+			{
+				value = new CardAssetViewModel(PrimaryCard, CardAssetType);
+				SetProp(value);
+			}
+			return value;
+		}
+	}
+
+	public CardAssetViewModel SecondaryAssetViewModel
+	{
+		get
+		{
+			var value = GetProp<CardAssetViewModel?>(null);
+			if(value == null || value.Card?.Id != SecondaryCard?.Id || value.CardAssetType != CardAssetType)
+			{
+				value = new CardAssetViewModel(SecondaryCard, CardAssetType);
+				SetProp(value);
+			}
+			return value;
+		}
+	}
+
+	public List<Hearthstone.Card>? RelatedCards
+	{
+		get => GetProp<List<Hearthstone.Card>?>(null);
+		set
+		{
+			RelatedCardsHeader = LocUtil.Get("Related_Cards", useCardLanguage: true);
+			OnPropertyChanged(nameof(RelatedCardsHeader));
+			SetProp(value);
+		}
+	}
+
+	public string? RelatedCardsHeader
+	{
+		get => GetProp<string?>(null);
+		set
+		{
+			SetProp(value ?? LocUtil.Get("Related_Cards", useCardLanguage: true));
+		}
+	}
+
+	public Dictionary<string, string>? RelatedCardsSummary
+	{
+		get => GetProp<Dictionary<string, string>?>(null);
+		set => SetProp(value);
+	}
+
+	public int RelatedCardsSummaryTotalNum
+	{
+		get => GetProp(0);
+		set => SetProp(value);
+	}
+
+	public PoolStatistics? PoolStatistics
+	{
+		get => GetProp<PoolStatistics?>(null);
+		set => SetProp(value);
+	}
+
+	public bool HasLargePool
+	{
+		get => GetProp(false);
+		set => SetProp(value);
+	}
+
+	public string? Text
+	{
+		get => GetProp<string?>(null);
+		set => SetProp(value);
+	}
+
+	/// <summary>
+	/// The text of an assembled card, with bold and italic tags, drawn over the description of the card
+	/// image (which shows the base card).
+	/// </summary>
+	public string? AssembledText
+	{
+		get => GetProp<string?>(null);
+		set => SetProp(value);
+	}
+
+	/// <summary>
+	/// Whether the card image has a minion type banner, which the assembled text leaves showing.
+	/// </summary>
+	public bool HasRaceBanner
+	{
+		get => GetProp(false);
+		set => SetProp(value);
+	}
+
+	public Dock ImageDock
+	{
+		get => GetProp(Dock.Left);
+		set => SetProp(value);
+	}
+
+	public Thickness CardImageOffset
+	{
+		get => GetProp(new Thickness(0));
+		set => SetProp(value);
+	}
+}

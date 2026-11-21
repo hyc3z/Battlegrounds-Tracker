@@ -1,0 +1,472 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using HearthDb.Enums;
+using HearthMirror;
+using Hearthstone_Deck_Tracker.Commands;
+using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Guides.Comps;
+using Hearthstone_Deck_Tracker.Hearthstone;
+using Hearthstone_Deck_Tracker.HsReplay;
+using Hearthstone_Deck_Tracker.Utility.Analytics;
+using Hearthstone_Deck_Tracker.Utility.Battlegrounds;
+using Hearthstone_Deck_Tracker.Utility.Logging;
+using Hearthstone_Deck_Tracker.Utility.MVVM;
+using HSReplay.Requests;
+
+namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Guides;
+
+public enum CompGuideListState
+{
+	Loading,
+	BaseFeature,
+	Tier7Feature,
+	Empty,
+	Error
+}
+
+public class BattlegroundsCompsGuidesViewModel : ViewModel
+{
+	public BattlegroundsCompsGuidesViewModel()
+	{
+		RetryCommand = new Command(async () => await RetryLoadCompGuides());
+		HSReplayNetOAuth.AccountDataUpdated += OnAccountChanged;
+		HSReplayNetOAuth.LoggedOut += OnAccountChanged;
+	}
+
+	private void OnAccountChanged()
+	{
+		if(IsPreLobby)
+			OnPreLobby();
+	}
+
+	public ICommand RetryCommand { get; }
+
+	public bool IsRetrying
+	{
+		get => GetProp(false);
+		private set => SetProp(value);
+	}
+
+	public List<BattlegroundsCompGuideViewModel>? Comps
+	{
+		get => GetProp<List<BattlegroundsCompGuideViewModel>?>(null);
+		private set
+		{
+			SetProp(value);
+			UpdateState();
+		}
+	}
+
+	public Dictionary<int, TieredComps>? CompsByTier
+	{
+		get => GetProp<Dictionary<int, TieredComps>?>(null);
+		private set
+		{
+			SetProp(value);
+			UpdateState();
+		}
+	}
+
+	public CompGuideListState CurrentState
+	{
+		get => GetProp(CompGuideListState.Loading);
+		private set
+		{
+			SetProp(value);
+			// Notify all visibility properties when state changes
+			OnPropertyChanged(nameof(LoadingVisibility));
+			OnPropertyChanged(nameof(BaseFeatureVisibility));
+			OnPropertyChanged(nameof(Tier7FeatureVisibility));
+			OnPropertyChanged(nameof(EmptyStateVisibility));
+			OnPropertyChanged(nameof(ErrorVisibility));
+		}
+	}
+
+	private void UpdateState()
+	{
+		if (HasError)
+		{
+			CurrentState = CompGuideListState.Error;
+		}
+		else if (CompsByTier != null)
+		{
+			var hasComps = CompsByTier.Values.Any(tier => tier.Comps?.Any() == true);
+			CurrentState = hasComps ? CompGuideListState.Tier7Feature : CompGuideListState.Empty;
+		}
+		else if (Comps != null)
+		{
+			CurrentState = Comps.Any() ? CompGuideListState.BaseFeature : CompGuideListState.Empty;
+		}
+		else
+		{
+			CurrentState = CompGuideListState.Loading;
+		}
+	}
+
+	public bool HasError
+	{
+		get => GetProp(false);
+		private set
+		{
+			SetProp(value);
+			UpdateState();
+		}
+	}
+
+	public bool HasRetriedAndFailed
+	{
+		get => GetProp(false);
+		private set => SetProp(value);
+	}
+
+	public async Task<List<BattlegroundsCompGuideViewModel>?> GetCompGuides()
+	{
+		try
+		{
+			var compsData = await ApiWrapper.GetCompsGuides(Helper.GetCardLanguage());
+			var viewModelData = compsData?
+				.OrderBy(comp => comp.Name)
+				.Select(comp => new BattlegroundsCompGuideViewModel(comp, IsPreLobby))
+				.ToList();
+			return viewModelData;
+		}
+		catch (Exception ex)
+		{
+			Log.Error($"Error loading comps data: {ex.Message}");
+			throw;
+		}
+	}
+
+	public async Task<Dictionary<int,TieredComps>?> GetPremiumCompGuides(string? token, BattlegroundsCompGuidesParams parameters)
+	{
+		try
+		{
+			var compsData = token != null
+				? await ApiWrapper.GetPremiumCompsGuides(token, parameters)
+				: await HSReplayNetOAuth.MakeRequest(c => c.GetTier7CompsGuides(parameters));
+
+			if(compsData?.ByTier == null)
+				return null;
+
+			var result = new Dictionary<int, TieredComps>();
+
+			var compsByAdjustedTier = compsData.ByTier
+				.SelectMany(t => t.Value)
+				.GroupBy(comp => comp.AdjustedTier ?? comp.Tier)
+				.OrderBy(g => g.Key);
+
+			foreach(var group in compsByAdjustedTier)
+			{
+				var tier = group.Key;
+				// demoted comps go to the top of their adjusted tier, promoted ones to the bottom
+				var comps = group
+					.OrderBy(comp => Math.Sign(comp.Tier - tier))
+					.ThenBy(comp => comp.Tier)
+					.ThenBy(comp => comp.TierRank)
+					.ToList();
+
+				var viewModels = comps.Select(comp => new BattlegroundsCompGuideViewModel(comp, IsPreLobby)).ToList();
+
+				result[tier] = new TieredComps
+				{
+					TierLetter = GetCompText(tier),
+					TierColor = GetTierColor(tier),
+					Comps = viewModels
+				};
+			}
+
+			return result;
+		}
+		catch (Exception ex)
+		{
+			Log.Error($"Error loading comps data: {ex.Message}");
+			throw;
+		}
+	}
+
+
+	public BattlegroundsCompGuideViewModel? SelectedComp
+	{
+		get => GetProp<BattlegroundsCompGuideViewModel?>(null);
+		set
+		{
+			SetProp(value);
+			OnPropertyChanged(nameof(IsCompSelected));
+		}
+	}
+
+	public bool IsCompSelected => SelectedComp != null;
+
+	private readonly SemaphoreSlim _updateCompGuidesSemaphore = new (1, 1);
+
+	private async Task RetryLoadCompGuides()
+	{
+		if (IsRetrying)
+			return;
+
+		try
+		{
+			IsRetrying = true;
+			HasRetriedAndFailed = false;
+			await _updateCompGuidesSemaphore.WaitAsync();
+			await UpdateCompGuides();
+
+			if (HasError)
+			{
+				HasRetriedAndFailed = true;
+			}
+		}
+		finally
+		{
+			_updateCompGuidesSemaphore.Release();
+			IsRetrying = false;
+		}
+	}
+
+	public bool IsPreLobby
+	{
+		get => GetProp(false);
+		private set => SetProp(value);
+	}
+
+	public void OnMinionPoolChanged()
+	{
+		var comps = CompsByTier?.Values.Where(v => v.Comps != null).SelectMany(v => v.Comps!) ?? Comps;
+		foreach(var comp in comps ?? Enumerable.Empty<BattlegroundsCompGuideViewModel>())
+			comp.OnMinionPoolChanged();
+	}
+
+	public async void OnMatchStart()
+	{
+		if(IsPreLobby)
+		{
+			IsPreLobby = false;
+			// the guides are rebuilt below, so a comp selected in the lobby would point at a stale view model
+			SelectedComp = null;
+		}
+
+		if(Core.Game.Spectator)
+			await Task.Delay(1500);
+
+		try
+		{
+			await _updateCompGuidesSemaphore.WaitAsync();
+			await UpdateCompGuides();
+		}
+		finally
+		{
+			_updateCompGuidesSemaphore.Release();
+		}
+	}
+
+	public async void OnPreLobby()
+	{
+		IsPreLobby = true;
+		try
+		{
+			await _updateCompGuidesSemaphore.WaitAsync();
+			SelectedComp = null;
+			await UpdateCompGuides();
+		}
+		finally
+		{
+			_updateCompGuidesSemaphore.Release();
+		}
+	}
+
+	private async Task UpdateCompGuides()
+	{
+		// Always refresh the comp guides
+		await TrySetCompsGuides();
+	}
+
+	private async Task TrySetCompsGuides()
+	{
+		if(IsPreLobby)
+		{
+			// no trial is activated here, spending one before the player has even queued is not worth it
+			if(HSReplayNetOAuth.AccountData?.IsTier7 ?? false)
+				// there is no minion pool before a match, so ask for the unfiltered list
+				await SetPremiumCompGuides(null, new BattlegroundsCompGuidesParams
+				{
+					MinionTypes = Array.Empty<int>(),
+					LanguageCode = Helper.GetCardLanguage(),
+				});
+			else
+				await SetFreeCompGuides();
+			return;
+		}
+
+		if(!Tier7Trial.IsAvailable)
+		{
+			await SetFreeCompGuides();
+			return;
+		}
+
+		HashSet<Race>? availableRaces;
+		try
+		{
+			availableRaces = await BattlegroundsUtils.WaitForAvailableRaces();
+		}
+		catch(OperationCanceledException)
+		{
+			return;
+		}
+
+		if(availableRaces == null)
+		{
+			HandleCompGuidesError("NoRaces", "Unable to get available races");
+			return;
+		}
+
+		var access = await Tier7Trial.GetAccess();
+		if(access != null)
+			await SetPremiumCompGuides(access.TrialToken, new BattlegroundsCompGuidesParams
+			{
+				MinionTypes = availableRaces.Cast<int>().ToArray(),
+				DeityDbfId = BattlegroundsUtils.GetBattlegroundsDeityDbfId(Core.Game.GameEntity),
+				AnomalyDbfId = BattlegroundsUtils.GetBattlegroundsAnomalyDbfId(Core.Game.GameEntity),
+				LanguageCode = Helper.GetCardLanguage(),
+				GameType = (int)HearthDbConverter.GetBnetGameType(Core.Game.CurrentGameType, Core.Game.CurrentFormat),
+			});
+		else
+			await SetFreeCompGuides();
+	}
+
+	private async Task SetPremiumCompGuides(string? token, BattlegroundsCompGuidesParams parameters)
+	{
+#if(DEBUG)
+		Log.Debug("Fetching Premium Battlegrounds Comp Guides...");
+#endif
+
+		Dictionary<int, TieredComps>? guides = null;
+		try
+		{
+			guides = await GetPremiumCompGuides(token, parameters);
+		}
+		catch(Exception e)
+		{
+			HandleCompGuidesError(e.GetType().Name, e.Message);
+		}
+
+		if(guides is not null)
+		{
+			// UpdateState prefers CompsByTier, so the free list has to go before it is set
+			Comps = null;
+			CompsByTier = guides;
+			HasError = false;
+		}
+		else if(!HasError)
+			HandleCompGuidesError("NoData", "Premium comp guides request returned no data");
+	}
+
+	private async Task SetFreeCompGuides()
+	{
+#if(DEBUG)
+		Log.Debug("Fetching Battlegrounds Comp Guides...");
+#endif
+
+		List<BattlegroundsCompGuideViewModel>? guides = null;
+		try
+		{
+			guides = await GetCompGuides();
+		}
+		catch(Exception e)
+		{
+			HandleCompGuidesError(e.GetType().Name, e.Message);
+		}
+
+		if(guides is not null)
+		{
+			CompsByTier = null;
+			Comps = guides;
+			HasError = false;
+		}
+		else if(!HasError)
+			HandleCompGuidesError("NoData", "Comp guides request returned no data");
+	}
+
+	public void OnMatchEnd()
+	{
+		IsPreLobby = false;
+		CompsByTier = null;
+		SelectedComp = null;
+		HasError = false;
+		HasRetriedAndFailed = false;
+	}
+
+	public class TieredComps
+	{
+		public string? TierLetter { get; set; }
+		public LinearGradientBrush? TierColor { get; set; }
+		public List<BattlegroundsCompGuideViewModel>? Comps { get; set; }
+	}
+
+	private string GetCompText(int tier)
+	{
+		return tier switch
+		{
+			1 => "S",
+			2 => "A",
+			3 => "B",
+			4 => "C",
+			5 => "D",
+			_ => "?"
+		};
+	}
+
+
+	private LinearGradientBrush GetTierColor(int tier)
+	{
+		LinearGradientBrush CreateLinearGradientBrush(Color color1, Color color2)
+		{
+			var brush = new LinearGradientBrush
+			{
+				StartPoint = new Point(0, 0.5),
+				EndPoint = new Point(1, 0.5)
+			};
+			brush.GradientStops.Add(new GradientStop(color1, 0.0));
+			brush.GradientStops.Add(new GradientStop(color2, 1.0));
+
+			return brush;
+		}
+
+		return tier switch
+		{
+			1 => CreateLinearGradientBrush(Color.FromRgb(64, 138, 191), Color.FromRgb(56, 95, 122)),
+			2 => CreateLinearGradientBrush(Color.FromRgb(107, 160, 54), Color.FromRgb(88, 121, 55)),
+			3 => CreateLinearGradientBrush(Color.FromRgb(146, 160, 54), Color.FromRgb(104, 121, 55)),
+			4 => CreateLinearGradientBrush(Color.FromRgb(160, 124, 54), Color.FromRgb(121, 95, 55)),
+			5 => CreateLinearGradientBrush(Color.FromRgb(160, 72, 54), Color.FromRgb(121, 66, 55)),
+			_ => CreateLinearGradientBrush(Color.FromRgb(112, 112, 112), Color.FromRgb(64, 64, 64))
+		};
+	}
+
+	private void HandleCompGuidesError(string type, string message)
+	{
+		HasError = true;
+		Influx.OnGetBattlegroundsCompositionGuidesError(type, message);
+	}
+
+	// Exclusive state visibility properties
+	public Visibility LoadingVisibility => CurrentState == CompGuideListState.Loading ? Visibility.Visible : Visibility.Collapsed;
+	public Visibility BaseFeatureVisibility => CurrentState == CompGuideListState.BaseFeature ? Visibility.Visible : Visibility.Collapsed;
+	public Visibility Tier7FeatureVisibility => CurrentState == CompGuideListState.Tier7Feature ? Visibility.Visible : Visibility.Collapsed;
+	public Visibility EmptyStateVisibility => CurrentState == CompGuideListState.Empty ? Visibility.Visible : Visibility.Collapsed;
+	public Visibility ErrorVisibility => CurrentState == CompGuideListState.Error ? Visibility.Visible : Visibility.Collapsed;
+
+	public void Reset()
+	{
+		IsPreLobby = false;
+		Comps = null;
+		CompsByTier = null;
+		SelectedComp = null;
+		HasError = false;
+		HasRetriedAndFailed = false;
+	}
+}
