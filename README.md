@@ -88,6 +88,11 @@ Notes:
 - The solution `BattlegroundsTracker.sln` contains the application and the `HearthWatcher` helper
   library and can be opened in Visual Studio / Rider as usual.
 
+No local toolchain? The GitHub Actions workflow [`.github/workflows/build.yml`](.github/workflows/build.yml)
+builds every push and pull request and uploads the packaged app as the `BattlegroundsTracker-win-x64`
+artifact. Pushing a `v*` tag (e.g. `git tag v0.1.1 && git push origin v0.1.1`) additionally creates a
+GitHub Release with `BattlegroundsTracker-v0.1.1-win-x64.zip` attached.
+
 ### Run
 
 Start `BattlegroundsTracker.exe`. The application lives in the tray and shows its window on first
@@ -209,6 +214,11 @@ MSBuild，设置 SDK 风格 WPF 工程所需的环境变量，产物输出到
   设为 `true`。
 - 解决方案 `BattlegroundsTracker.sln` 同时包含主程序和 `HearthWatcher` 辅助库，可直接用
   Visual Studio / Rider 打开。
+
+本机没有构建环境也可以：GitHub Actions 工作流 [`.github/workflows/build.yml`](.github/workflows/build.yml)
+会在每次 push / pull request 时自动构建，并把打好包的程序作为 `BattlegroundsTracker-win-x64`
+artifact 上传。推送 `v*` 标签（例如 `git tag v0.1.1 && git push origin v0.1.1`）还会额外创建
+GitHub Release，并附带 `BattlegroundsTracker-v0.1.1-win-x64.zip`。
 
 ### 运行
 

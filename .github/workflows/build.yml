@@ -1,0 +1,95 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    name: Build (win-x64, Release)
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Pin the .NET 8 SDK for the build
+        run: |
+          $sdkLine = dotnet --list-sdks | Where-Object { ($_ -split "\s+")[0] -like "8.0.*" } | Select-Object -Last 1
+          if (-not $sdkLine) {
+            throw "No .NET 8 SDK found after setup-dotnet"
+          }
+          $sdkVersion = ($sdkLine -split "\s+")[0]
+          $sdkRoot = [regex]::Match($sdkLine, "\[(.+)\]").Groups[1].Value
+          $sdkPath = Join-Path (Join-Path $sdkRoot $sdkVersion) "Sdks"
+          "MSBuildSDKsPath=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "MSBuildSDKsPath: $sdkPath"
+
+      - name: Ensure .NET Framework 4.7.2 targeting pack
+        run: |
+          $targetingPack = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2"
+          if (Test-Path $targetingPack) {
+            Write-Host "Targeting pack already installed: $targetingPack"
+          } else {
+            choco install netfx-4.7.2-devpack -y --no-progress
+          }
+
+      - name: Build
+        run: |
+          $arguments = @("-Configuration", "Release")
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            # Pass the tag (without the leading "v") so the assembly version matches the release.
+            $arguments += @("-Version", ($env:GITHUB_REF_NAME -replace "^v", ""))
+          }
+          .\build.cmd @arguments
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: BattlegroundsTracker-win-x64
+          path: BattlegroundsTracker/bin/x64/Release
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: BattlegroundsTracker-win-x64
+          path: app
+
+      - name: Package
+        run: |
+          name="BattlegroundsTracker-${{ github.ref_name }}-win-x64"
+          mv app "$name"
+          zip -r "$name.zip" "$name"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BattlegroundsTracker-${{ github.ref_name }}-win-x64.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true

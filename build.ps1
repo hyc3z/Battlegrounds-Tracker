@@ -6,6 +6,8 @@
 param(
 	[ValidateSet("Debug", "Release")]
 	[string]$Configuration = "Debug",
+	# Overrides the Version from the csproj (the release workflow passes the git tag here).
+	[string]$Version,
 	[switch]$SkipRestore
 )
 
@@ -14,21 +16,25 @@ $root = $PSScriptRoot
 $project = Join-Path $root "BattlegroundsTracker\BattlegroundsTracker.csproj"
 
 # --- locate the .NET SDK (provides Microsoft.NET.Sdk.WindowsDesktop) ---------------------------------
-$dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
-if(-not $dotnet)
+# MSBuildSDKsPath can be set by the caller (the release workflow pins the SDK this way).
+if([string]::IsNullOrWhiteSpace($env:MSBuildSDKsPath))
 {
-	throw "dotnet SDK not found. Install the .NET SDK (8.0 or later) and make sure 'dotnet' is on PATH."
-}
+	$dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+	if(-not $dotnet)
+	{
+		throw "dotnet SDK not found. Install the .NET SDK (8.0 or later) and make sure 'dotnet' is on PATH."
+	}
 
-$sdkLine = dotnet --list-sdks | Select-Object -Last 1
-if(-not $sdkLine)
-{
-	throw "No .NET SDK installed. Install the .NET SDK (8.0 or later)."
-}
+	$sdkLine = dotnet --list-sdks | Select-Object -Last 1
+	if(-not $sdkLine)
+	{
+		throw "No .NET SDK installed. Install the .NET SDK (8.0 or later)."
+	}
 
-$sdkVersion = ($sdkLine -split "\s+")[0]
-$sdkRoot = [regex]::Match($sdkLine, "\[(.+)\]").Groups[1].Value
-$env:MSBuildSDKsPath = Join-Path $sdkRoot "$sdkVersion\Sdks"
+	$sdkVersion = ($sdkLine -split "\s+")[0]
+	$sdkRoot = [regex]::Match($sdkLine, "\[(.+)\]").Groups[1].Value
+	$env:MSBuildSDKsPath = Join-Path $sdkRoot "$sdkVersion\Sdks"
+}
 # Workloads are resolved through the SDK's resolver, which the full framework MSBuild cannot use.
 $env:MSBuildEnableWorkloadResolver = "false"
 
@@ -61,6 +67,10 @@ $arguments = @(
 if(-not $SkipRestore)
 {
 	$arguments += "/restore"
+}
+if($Version)
+{
+	$arguments += "/p:Version=$Version"
 }
 
 & $msbuild @arguments
