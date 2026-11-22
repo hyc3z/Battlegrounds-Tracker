@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
@@ -266,12 +266,13 @@ public class BattlegroundsChinaModule
 	{
 		var gameRegion = Core.Game.CurrentRegion;
 		var gameLanguage = LocUtil.GetHearthstoneLanguageFromRegistry();
-		var hdtLanguage = Config.Instance.Localization;
 		var timeZone = TimeZoneInfo.Local.Id;
 
+		// The tracker ships English resources only, so the UI language can never be zhCN and must not
+		// be part of this check: the client's region/language and the system time zone identify the
+		// environment the module (and HDTTools) supports.
 		return gameRegion is Region.CHINA &&
 		       gameLanguage is "zhCN" &&
-		       hdtLanguage is Language.zhCN &&
 		       timeZone is "China Standard Time";
 	}
 
