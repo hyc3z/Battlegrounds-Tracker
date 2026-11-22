@@ -27,6 +27,7 @@ namespace Hearthstone_Deck_Tracker.LogReader
 		private readonly PowerHandler _powerLineHandler = new PowerHandler();
 		private readonly GameInfoHandler _gameInfoHandler = new GameInfoHandler();
 		private readonly ChoicesHandler _choicesHandler = new ChoicesHandler();
+		private readonly LoadingScreenHandler _loadingScreenHandler = new LoadingScreenHandler();
 		private HsGameState? _gameState;
 		private GameV2? _game;
 		private readonly LogWatcher _logWatcher;
@@ -188,6 +189,7 @@ namespace Hearthstone_Deck_Tracker.LogReader
 						OnArenaLogLine.Execute(line.Line);
 						break;
 					case "LoadingScreen":
+						_loadingScreenHandler.Handle(line, _gameState, _game);
 						break;
 				}
 			}
