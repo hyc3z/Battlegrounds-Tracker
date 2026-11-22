@@ -37,6 +37,34 @@ public class BattlegroundsChinaModule
 		}
 	}
 
+	// HDTTools was built for the full HDT: it refuses to run unless HDT's own config
+	// (%APPDATA%\HearthstoneDeckTracker\config.xml) exists and has a zhCN UI language. This fork
+	// keeps its config in %APPDATA%\BattlegroundsTracker, so write a minimal compatibility config
+	// when HDT never ran on this machine. Existing HDT configs are left untouched.
+	internal static void EnsureHdtCompatibilityConfig()
+	{
+		try
+		{
+			var hdtDirectory = System.IO.Path.Combine(
+				Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HearthstoneDeckTracker");
+			var configPath = System.IO.Path.Combine(hdtDirectory, "config.xml");
+			if(System.IO.File.Exists(configPath))
+				return;
+
+			System.IO.Directory.CreateDirectory(hdtDirectory);
+			System.IO.File.WriteAllText(configPath,
+				"<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"
+				+ "<Config xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n"
+				+ "  <Localization>zhCN</Localization>\r\n"
+				+ "</Config>\r\n");
+			Log.Info($"BattlegroundsChinaModule: wrote HDT compatibility config to {configPath}");
+		}
+		catch(Exception e)
+		{
+			Log.Warn($"BattlegroundsChinaModule: could not write HDT compatibility config: {e.Message}");
+		}
+	}
+
 	internal static string? GetHdtToolsPath()
 	{
 		var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
@@ -60,6 +88,7 @@ public class BattlegroundsChinaModule
 	{
 		try
 		{
+			EnsureHdtCompatibilityConfig();
 			var hdtToolsPath = GetHdtToolsPath();
 
 			if(hdtToolsPath == null)
@@ -121,6 +150,7 @@ public class BattlegroundsChinaModule
 	{
 		try
 		{
+			EnsureHdtCompatibilityConfig();
 			using var ts = new TaskService();
 			var task = ts.GetTask(TaskName);
 			if(task == null)
