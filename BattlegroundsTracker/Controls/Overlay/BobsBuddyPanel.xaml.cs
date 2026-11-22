@@ -319,6 +319,15 @@ private static bool IsUpdateDownloaded => false;
 			}
 		}
 
+		// The re-run button is only useful after a combat, while the last opponent is still known.
+		public Visibility RerunVisibility => BobsBuddyInvoker.CanRerunLastCombat ? Visibility.Visible : Visibility.Collapsed;
+
+		private async void RerunButton_OnClick(object sender, RoutedEventArgs e)
+		{
+			await BobsBuddyInvoker.RerunLastCombatAsync();
+			OnPropertyChanged(nameof(RerunVisibility));
+		}
+
 		private Visibility _infoVisibility = Config.Instance.SeenBobsBuddyInfo ? Visibility.Collapsed : Visibility.Visible;
 		public Visibility InfoVisibility
 		{
@@ -505,6 +514,7 @@ private static bool IsUpdateDownloaded => false;
 			PlayerAverageDamageOpacity = SoftLabelOpacity;
 			OpponentAverageDamageOpacity = SoftLabelOpacity;
 			State = BobsBuddyState.Initial;
+			OnPropertyChanged(nameof(RerunVisibility));
 			ClearErrorState();
 			if(BobsBuddyInvoker.IsUpdateRequired)
 				ErrorState = BobsBuddyErrorState.UpdateRequired;
@@ -580,6 +590,7 @@ private static bool IsUpdateDownloaded => false;
 				return;
 			var lastState = State;
 			State = state;
+			OnPropertyChanged(nameof(RerunVisibility));
 
 			if(state == BobsBuddyState.Combat || state == BobsBuddyState.CombatPartial)
 			{

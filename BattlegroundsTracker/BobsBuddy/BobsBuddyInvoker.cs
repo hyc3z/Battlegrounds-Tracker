@@ -95,6 +95,20 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 		private static Guid _currentGameId;
 		private static readonly Dictionary<string, BobsBuddyInvoker> _instances = new Dictionary<string, BobsBuddyInvoker>();
 
+		// The invoker of the most recent finished combat. Its input still holds that combat's
+		// opponent, which is what the "re-run" button simulates against the current player board.
+		private static BobsBuddyInvoker? _lastCombat;
+
+		private bool _isRerunning;
+
+		internal static bool CanRerunLastCombat =>
+			_lastCombat != null
+			&& _lastCombat._input != null
+			&& _lastCombat.State is BobsBuddyState.Shopping or BobsBuddyState.ShoppingAfterPartial
+			&& !_lastCombat._game.IsBattlegroundsDuosMatch;
+
+		internal static Task RerunLastCombatAsync() => _lastCombat?.RerunAsync() ?? Task.CompletedTask;
+
 		private BobsBuddyPlayer DuosInputPlayer = new BobsBuddyPlayer(null);
 		private BobsBuddyPlayer DuosInputOpponent = new BobsBuddyPlayer(null);
 		private BobsBuddyPlayer? DuosInputPlayerTeammate;
@@ -106,6 +120,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			{
 				Log.Debug("New GameId. Clearing instances...");
 				_instances.Clear();
+				_lastCombat = null;
 			}
 			_currentGameId = gameId;
 
@@ -400,6 +415,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 				if(HasErrorState())
 					return;
 
+				_lastCombat = this;
 				BobsBuddyDisplay.SetLastOutcome(GetLastCombatDamageDealt());
 				BobsBuddyDisplay.SetState(State);
 				ValidateSimulationResultAsync().Forget();
@@ -411,6 +427,69 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 				if(ReportErrors)
 					SentryReporter.CaptureBobsBuddyException(e, _input, _turn, _game.IsBattlegroundsDuosMatch || (_input?.InputContainsDuosCards ?? false), ReportContext);
 				return;
+			}
+		}
+
+		/// <summary>
+		/// Re-simulates the last combat's opponent against the player's current board. This is what
+		/// the re-run button on the Bob's Buddy panel invokes while shopping: the opponent side is
+		/// the board that was actually fought, the player side is rebuilt from the current game state.
+		/// </summary>
+		internal async Task RerunAsync()
+		{
+			var input = _input;
+			if(_isRerunning || input == null || _game.IsBattlegroundsDuosMatch)
+				return;
+			if(State is not (BobsBuddyState.Shopping or BobsBuddyState.ShoppingAfterPartial))
+				return;
+
+			_isRerunning = true;
+			var previousPlayer = input.Player;
+			var previousTurn = _turn;
+			var previousErrorState = ErrorState;
+			try
+			{
+				DebugLog("Re-running simulation against the last opponent with the current board...");
+
+				var simulator = new Simulator();
+				var playerInput = new BobsBuddyPlayer(input);
+				SetupInputPlayer(simulator, _game.Player, playerInput, _game.PlayerEntity, true);
+
+				input.Player = playerInput;
+				input.SetTurn(_game.GetTurnNumber());
+
+				BobsBuddyDisplay.SetErrorState(BobsBuddyErrorState.None, null, true);
+				BobsBuddyDisplay.HidePercentagesShowSpinners();
+
+				var result = await new SimulationRunner().SimulateMultiThreaded(input, Iterations, ThreadCount, MaxTime);
+				if(result == null)
+				{
+					BobsBuddyDisplay.ShowPercentagesHideSpinners();
+					return;
+				}
+
+				DebugLog($"Re-run result: WinRate={result.winRate * 100}%, TieRate={result.tieRate * 100}%, LossRate={result.lossRate * 100}%");
+				BobsBuddyDisplay.ShowCompletedSimulation(
+					result.winRate,
+					result.tieRate,
+					result.lossRate,
+					result.theirDeathRate,
+					result.myDeathRate,
+					result.damageResults.ToList()
+				);
+			}
+			catch(Exception e)
+			{
+				DebugLog(e.ToString());
+				Log.Error(e);
+				BobsBuddyDisplay.ShowPercentagesHideSpinners();
+			}
+			finally
+			{
+				input.Player = previousPlayer;
+				input.SetTurn(previousTurn);
+				ErrorState = previousErrorState;
+				_isRerunning = false;
 			}
 		}
 

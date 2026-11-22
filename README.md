@@ -34,7 +34,8 @@ Battlegrounds overlay options:
 ### Features
 
 - **Bob's Buddy** combat simulation: win / tie / loss rates and the damage distribution, using the
-  same simulator as HDT (`lib/BobsBuddy.dll`).
+  same simulator as HDT (`lib/BobsBuddy.dll`). A re-run button on the panel simulates the previous
+  opponent against your current lineup while shopping.
 - **Battlegrounds overlay**
   - Hero picking and hero power picking statistics (HSReplay.net / Tier7 account needed for some panels).
   - Quest, trinket and anomaly guides, composition guides and the composition tab.
@@ -163,7 +164,7 @@ Battlegrounds Tracker（酒馆战棋助手）是一个只保留《炉石传说�
 ### 功能
 
 - **Bob's Buddy 战斗模拟**：胜率 / 平局 / 败率与伤害分布，使用与 HDT 相同的模拟器
-  （`lib/BobsBuddy.dll`）。
+  （`lib/BobsBuddy.dll`）。面板上的重跑按钮可以在购物阶段用当前阵容重新模拟上一轮对手。
 - **酒馆战棋覆盖层**
   - 英雄选择、英雄技能选择统计（部分面板需要 HSReplay.net / Tier7 账号）。
   - 任务、饰品、畸变指南，阵容指南与阵容标签页。

@@ -191,6 +191,19 @@
                                     </Rectangle.Fill>
                                 </Rectangle>
                             </battlegrounds:OverlayButton>
+                            <battlegrounds:OverlayButton Background="Transparent" HorizontalAlignment="Right" Margin="0,0,28,0"
+                                                         Visibility="{Binding RerunVisibility}" Click="RerunButton_OnClick">
+                                <Rectangle Width="16" Height="16" Style="{StaticResource StatusBarIconStyle}">
+                                    <Rectangle.Fill>
+                                        <VisualBrush Visual="{StaticResource appbar_refresh_white}" />
+                                    </Rectangle.Fill>
+                                    <Rectangle.ToolTip>
+                                        <ToolTip>
+                                            <TextBlock Text="用当前阵容重跑上一轮对手" />
+                                        </ToolTip>
+                                    </Rectangle.ToolTip>
+                                </Rectangle>
+                            </battlegrounds:OverlayButton>
                             <battlegrounds:OverlayButton Background="Transparent" HorizontalAlignment="Right" Visibility="{Binding SettingsVisibility}"
                                                          Click="BtnSettings_OnClick">
                                 <Rectangle Width="20" Height="20" Style="{StaticResource StatusBarIconStyle}">
