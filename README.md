@@ -94,6 +94,22 @@ builds every push and pull request and uploads the packaged app as the `Battlegr
 artifact. Pushing a `v*` tag (e.g. `git tag v0.1.1 && git push origin v0.1.1`) additionally creates a
 GitHub Release with `BattlegroundsTracker-v0.1.1-win-x64.zip` attached.
 
+### One-click build & run
+
+```cmd
+run.cmd
+```
+
+`run.cmd` stops a running tracker instance (it locks `HearthWatcher.dll`), builds the project and
+starts the freshly built executable.
+
+- `run.cmd Release` — build and run the Release configuration.
+- `run.cmd -NoBuild` — start the existing executable without rebuilding (an already running instance
+  is activated).
+- `run.cmd -Wait` — wait for the tracker to exit (useful for debugging).
+
+The PowerShell equivalent is `.\run.ps1` with the same arguments.
+
 ### Run
 
 Start `BattlegroundsTracker.exe`. The application lives in the tray and shows its window on first
@@ -220,6 +236,20 @@ MSBuild，设置 SDK 风格 WPF 工程所需的环境变量，产物输出到
 会在每次 push / pull request 时自动构建，并把打好包的程序作为 `BattlegroundsTracker-win-x64`
 artifact 上传。推送 `v*` 标签（例如 `git tag v0.1.1 && git push origin v0.1.1`）还会额外创建
 GitHub Release，并附带 `BattlegroundsTracker-v0.1.1-win-x64.zip`。
+
+### 一键构建并运行
+
+```cmd
+run.cmd
+```
+
+`run.cmd` 会先关闭正在运行的助手（运行中的程序会锁定 `HearthWatcher.dll`），然后重新构建并启动最新产物。
+
+- `run.cmd Release` —— 以 Release 配置构建并运行。
+- `run.cmd -NoBuild` —— 不重新构建，直接启动已有产物（如果已有实例在运行则激活它）。
+- `run.cmd -Wait` —— 等待助手退出后返回（便于调试）。
+
+PowerShell 等价用法为 `.\run.ps1`，参数相同。
 
 ### 运行
 
