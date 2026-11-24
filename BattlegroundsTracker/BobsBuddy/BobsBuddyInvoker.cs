@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using HearthDb.Enums;
@@ -57,6 +58,10 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 		}
 
 		private Input? _input;
+
+		// Independent copy of the opponent board captured when the combat starts. Re-runs build a fresh
+		// simulation input from this copy instead of relying on the (simulator-owned) input of the combat.
+		private BobsBuddyPlayer? _rerunOpponentSnapshot;
 
 		// True in games where an opponent Malorne can be summoned during the current combat (the Bring in the Buddies anomaly)
 		internal static bool CurrentCombatMayHaveOpponentMalorne;
@@ -416,6 +421,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 					return;
 
 				_lastCombat = this;
+				DebugLog($"Re-run data: captured opponent side={_rerunOpponentSnapshot?.Side.Count.ToString() ?? "null"}, input opponent side={_input?.Opponent.Side.Count.ToString() ?? "null"}");
 				BobsBuddyDisplay.SetLastOutcome(GetLastCombatDamageDealt());
 				BobsBuddyDisplay.SetState(State);
 				ValidateSimulationResultAsync().Forget();
@@ -444,8 +450,6 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 				return;
 
 			_isRerunning = true;
-			var previousPlayer = input.Player;
-			var previousTurn = _turn;
 			var previousErrorState = ErrorState;
 			try
 			{
@@ -455,13 +459,30 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 				var playerInput = new BobsBuddyPlayer(input);
 				SetupInputPlayer(simulator, _game.Player, playerInput, _game.PlayerEntity, true);
 
-				input.Player = playerInput;
-				input.SetTurn(_game.GetTurnNumber());
+				// Use the copy captured when the combat started: the input's own opponent board belongs to
+				// the simulation and may have been consumed/mutated by the time the re-run is requested.
+				var opponentInput = _rerunOpponentSnapshot ?? input.Opponent;
+				DebugLog($"Re-run boards: player side={playerInput.Side.Count}, opponent side={opponentInput.Side.Count}");
+				DebugLog("Re-run player: " + string.Join(", ", playerInput.Side.Select(m => m.ToString())));
+				DebugLog("Re-run opponent: " + string.Join(", ", opponentInput.Side.Select(m => m.ToString())));
+				if(opponentInput.Side.Count == 0)
+					DebugLog("Re-run: the captured opponent board is empty, the result will not reflect the last combat.");
+
+				var rerunInput = new Input
+				{
+					Player = playerInput,
+					Opponent = opponentInput,
+					DamageCap = input.DamageCap,
+					Anomaly = input.Anomaly,
+					isDuos = false
+				};
+				rerunInput.availableRaces = input.availableRaces;
+				rerunInput.SetTurn(_game.GetTurnNumber());
 
 				BobsBuddyDisplay.SetErrorState(BobsBuddyErrorState.None, null, true);
 				BobsBuddyDisplay.HidePercentagesShowSpinners();
 
-				var result = await new SimulationRunner().SimulateMultiThreaded(input, Iterations, ThreadCount, MaxTime);
+				var result = await new SimulationRunner().SimulateMultiThreaded(rerunInput, Iterations, ThreadCount, MaxTime);
 				if(result == null)
 				{
 					BobsBuddyDisplay.ShowPercentagesHideSpinners();
@@ -486,11 +507,42 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			}
 			finally
 			{
-				input.Player = previousPlayer;
-				input.SetTurn(previousTurn);
 				ErrorState = previousErrorState;
 				_isRerunning = false;
 			}
+		}
+
+		/// <summary>
+		/// Creates an independent copy of the opponent board for re-runs. Minions are cloned into their own
+		/// simulator (which also clones their enchantments); the remaining lists only hold read-only data
+		/// objects that the simulation clones for every fight, so they can be shared.
+		/// </summary>
+		private static BobsBuddyPlayer CreateRerunOpponentSnapshot(BobsBuddyPlayer source)
+		{
+			var snapshot = new BobsBuddyPlayer(null);
+			foreach(var property in typeof(BobsBuddyPlayer).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+			{
+				if(!property.CanRead || !property.CanWrite)
+					continue;
+				if(property.PropertyType != typeof(int) && property.PropertyType != typeof(bool) && property.PropertyType != typeof(string))
+					continue;
+				property.SetValue(snapshot, property.GetValue(source));
+			}
+
+			if(source.HeroIsKelThuzad)
+				snapshot.SetHeroIsKelThuzad();
+
+			var simulator = new Simulator();
+			foreach(var minion in source.Side)
+				snapshot.Side.Add(minion.Clone(simulator));
+
+			snapshot.Hand.AddRange(source.Hand);
+			snapshot.HeroPowers.AddRange(source.HeroPowers);
+			snapshot.Quests.AddRange(source.Quests);
+			snapshot.Objectives.AddRange(source.Objectives);
+			snapshot.Trinkets.AddRange(source.Trinkets);
+			snapshot.Secrets.AddRange(source.Secrets);
+			return snapshot;
 		}
 
 		// Reports an unsupported interaction that was deferred during combat and never resolved by TryRerun()
@@ -912,7 +964,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 			inputPlayer.ResourcesSpentThisGame = playerEntity.GetTag(GameTag.NUM_RESOURCES_SPENT_THIS_GAME);   // direct
 
-			// The tag is never sent for the opponent — derive the value if there is a Malorne on their board.
+			// The tag is never sent for the opponent 鈥?derive the value if there is a Malorne on their board.
 			if(inputPlayer.ResourcesSpentThisGame == 0 && !friendly)
 			{
 				var malorne = gamePlayer.Board.FirstOrDefault(e => e.CardId == NonCollectible.Neutral.ForestLordCenarius_Malorne1
@@ -982,6 +1034,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			_pendingAutoAssemblerDeathrattleSources.Clear();
 			_pendingCrabDeathrattleSources.Clear();
 
+			_rerunOpponentSnapshot = null;
 			LastAttackingHero = null;
 			_attackingHero = null;
 			_defendingHero = null;
@@ -1014,6 +1067,18 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 					DuosInputPlayer = input.Player;
 					DuosInputOpponent = input.Opponent;
 
+					// Capture an independent copy of the board that is being fought, so the re-run button does
+					// not depend on the mutable state the simulation leaves behind.
+					try
+					{
+						_rerunOpponentSnapshot = CreateRerunOpponentSnapshot(input.Opponent);
+					}
+					catch(Exception e)
+					{
+						// The re-run button is optional; never let the snapshot break the combat simulation.
+						_rerunOpponentSnapshot = null;
+						DebugLog("Could not capture the opponent board for re-runs: " + e);
+					}
 					DuosInputPlayerTeammate = null;
 					DuosInputOpponentTeammate = null;
 				}
@@ -1788,8 +1853,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			// Use the current value for the divisions below
 			triggerMultiplier = multiplierNow;
 
-			// Extra deathrattles (e.g., Titus Rivendare) resolve as full repeats of the whole deathrattle list —
-			// so the first (observed / triggerMultiplier) are the distinct deathrattles in their real order.
+			// Extra deathrattles (e.g., Titus Rivendare) resolve as full repeats of the whole deathrattle list 鈥?			// so the first (observed / triggerMultiplier) are the distinct deathrattles in their real order.
 			_observedAutoAssemblerFirings.TryGetValue(sourceEntityId, out var observedFirings);
 			var firedDeathrattles = (observedFirings - phylacteryExtra) / triggerMultiplier;
 			var summonedDeathrattles = (summonedByIsPremium.Count - phylacteryExtra) / triggerMultiplier;
@@ -1818,12 +1882,12 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 					currentIndices.Add(i);
 			}
 
-			// If observed summons not more than entries already captured — nothing to add.
+			// If observed summons not more than entries already captured 鈥?nothing to add.
 			if(automatons.Count <= currentIndices.Count)
 				return false;
 
 			// Replace the Auto Assembler entries with the observed sequence, in place: the simulator
-			// fires AdditionalDeathrattles in list order, so the order decides summon order — board
+			// fires AdditionalDeathrattles in list order, so the order decides summon order 鈥?board
 			// positions, and which summons no longer fit once the board fills.
 			var insertAt = currentIndices.Count > 0 ? currentIndices[0] : minion.AdditionalDeathrattles.Count;
 			for(var i = currentIndices.Count - 1; i >= 0; i--)
@@ -1883,8 +1947,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			if(minion is ICopiesDeathrattles)
 				return false;
 
-			// Extra deathrattles (e.g., Titus Rivendare) resolve as full repeats of the whole deathrattle list —
-			// so the first (observed / triggerMultiplier) summons are the distinct deathrattles in their real order.
+			// Extra deathrattles (e.g., Titus Rivendare) resolve as full repeats of the whole deathrattle list 鈥?			// so the first (observed / triggerMultiplier) summons are the distinct deathrattles in their real order.
 			// Unlike Auto Assembler there is no innate summoner of Crabs to skip: every observed firing maps to
 			// one granted "Crab Riding" entry on AdditionalDeathrattles.
 			var crabs = summonedByIsPremium.Take(summonedByIsPremium.Count / triggerMultiplier).ToList();
@@ -1900,12 +1963,12 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 					currentIndices.Add(i);
 			}
 
-			// If observed summons not more than entries already captured — nothing to add.
+			// If observed summons not more than entries already captured 鈥?nothing to add.
 			if(crabs.Count <= currentIndices.Count)
 				return false;
 
 			// Replace the Crab entries with the observed sequence, in place: the simulator fires
-			// AdditionalDeathrattles in list order, so the order decides summon order — board
+			// AdditionalDeathrattles in list order, so the order decides summon order 鈥?board
 			// positions, and which summons no longer fit once the board fills.
 			var insertAt = currentIndices.Count > 0 ? currentIndices[0] : minion.AdditionalDeathrattles.Count;
 			for(var i = currentIndices.Count - 1; i >= 0; i--)
