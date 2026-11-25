@@ -277,8 +277,7 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.ChinaModule
 			        {
 				        var invoker = BobsBuddyInvoker.GetInstance(Core.Game.CurrentGameStats.GameId,
 					        Core.Game.GetTurnNumber());
-				        invoker.State = BobsBuddyState.Shopping;
-				        invoker.StartShoppingAsync();
+				        _ = invoker.StartShoppingAsync();
 			        }
 
 			        Core.Game.Metrics.BattlegroundsChinaModuleActionSuccessCount++;

@@ -43,10 +43,6 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay
 			var bobsBuddy = config?.BobsBuddy;
 			if(bobsBuddy == null)
 				return BobsBuddyWarningState.None;
-			if(bobsBuddy.MinRecommendedVersion is string minVersion &&
-			   Version.TryParse(minVersion, out var recommendedVersion)
-			   && recommendedVersion > Helper.GetCurrentVersion())
-				return BobsBuddyWarningState.UpdateAvailable;
 			return bobsBuddy.DataQualityWarning ? BobsBuddyWarningState.DataQuality : BobsBuddyWarningState.None;
 		}
 
@@ -321,6 +317,8 @@ private static bool IsUpdateDownloaded => false;
 
 		// The re-run button is only useful after a combat, while the last opponent is still known.
 		public Visibility RerunVisibility => BobsBuddyInvoker.CanRerunLastCombat ? Visibility.Visible : Visibility.Collapsed;
+
+		internal void RefreshRerunVisibility() => OnPropertyChanged(nameof(RerunVisibility));
 
 		private async void RerunButton_OnClick(object sender, RoutedEventArgs e)
 		{

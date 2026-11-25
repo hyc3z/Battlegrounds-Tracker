@@ -59,10 +59,6 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 		private Input? _input;
 
-		// Independent copy of the opponent board captured when the combat starts. Re-runs build a fresh
-		// simulation input from this copy instead of relying on the (simulator-owned) input of the combat.
-		private BobsBuddyPlayer? _rerunOpponentSnapshot;
-
 		// True in games where an opponent Malorne can be summoned during the current combat (the Bring in the Buddies anomaly)
 		internal static bool CurrentCombatMayHaveOpponentMalorne;
 
@@ -110,6 +106,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			_lastCombat != null
 			&& _lastCombat._input != null
 			&& _lastCombat.State is BobsBuddyState.Shopping or BobsBuddyState.ShoppingAfterPartial
+			&& !_lastCombat._game.IsBattlegroundsCombatPhase
 			&& !_lastCombat._game.IsBattlegroundsDuosMatch;
 
 		internal static Task RerunLastCombatAsync() => _lastCombat?.RerunAsync() ?? Task.CompletedTask;
@@ -255,6 +252,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 
 				State = BobsBuddyState.Combat;
+				BobsBuddyDisplay.RefreshRerunVisibility();
 				DebugLog($"{_instanceKey} Waiting for state changes...");
 				await Task.Delay(StateChangeDelay);
 				if(State != BobsBuddyState.Combat)
@@ -393,6 +391,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 				if(State == BobsBuddyState.Shopping || State == BobsBuddyState.ShoppingAfterPartial)
 				{
 					DebugLog($"{_instanceKey} already in shopping state. Exiting");
+					BobsBuddyDisplay.RefreshRerunVisibility();
 					return;
 				}
 				var wasPreviousStateParcial = State == BobsBuddyState.CombatPartial;
@@ -417,11 +416,16 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 					State = wasPreviousStateParcial ? BobsBuddyState.ShoppingAfterPartial : BobsBuddyState.Shopping;
 				}
 
-				if(HasErrorState())
-					return;
+				if(_input != null && !_game.IsBattlegroundsDuosMatch)
+					_lastCombat = this;
 
-				_lastCombat = this;
-				DebugLog($"Re-run data: captured opponent side={_rerunOpponentSnapshot?.Side.Count.ToString() ?? "null"}, input opponent side={_input?.Opponent.Side.Count.ToString() ?? "null"}");
+				if(HasErrorState())
+				{
+					BobsBuddyDisplay.RefreshRerunVisibility();
+					return;
+				}
+
+				DebugLog($"Re-run data (turn {_turn}): input opponent side={_input?.Opponent.Side.Count.ToString() ?? "null"}");
 				BobsBuddyDisplay.SetLastOutcome(GetLastCombatDamageDealt());
 				BobsBuddyDisplay.SetState(State);
 				ValidateSimulationResultAsync().Forget();
@@ -444,7 +448,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 		internal async Task RerunAsync()
 		{
 			var input = _input;
-			if(_isRerunning || input == null || _game.IsBattlegroundsDuosMatch)
+			if(_isRerunning || input == null || _game.IsBattlegroundsDuosMatch || _game.IsBattlegroundsCombatPhase)
 				return;
 			if(State is not (BobsBuddyState.Shopping or BobsBuddyState.ShoppingAfterPartial))
 				return;
@@ -453,25 +457,10 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			var previousErrorState = ErrorState;
 			try
 			{
-				DebugLog("Re-running simulation against the last opponent with the current board...");
-
-				var simulator = new Simulator();
-				var playerInput = new BobsBuddyPlayer(input);
-				SetupInputPlayer(simulator, _game.Player, playerInput, _game.PlayerEntity, true);
-
-				// Use the copy captured when the combat started: the input's own opponent board belongs to
-				// the simulation and may have been consumed/mutated by the time the re-run is requested.
-				var opponentInput = _rerunOpponentSnapshot ?? input.Opponent;
-				DebugLog($"Re-run boards: player side={playerInput.Side.Count}, opponent side={opponentInput.Side.Count}");
-				DebugLog("Re-run player: " + string.Join(", ", playerInput.Side.Select(m => m.ToString())));
-				DebugLog("Re-run opponent: " + string.Join(", ", opponentInput.Side.Select(m => m.ToString())));
-				if(opponentInput.Side.Count == 0)
-					DebugLog("Re-run: the captured opponent board is empty, the result will not reflect the last combat.");
+				DebugLog($"Re-running simulation against turn {_turn} opponent with the current board...");
 
 				var rerunInput = new Input
 				{
-					Player = playerInput,
-					Opponent = opponentInput,
 					DamageCap = input.DamageCap,
 					Anomaly = input.Anomaly,
 					isDuos = false
@@ -479,10 +468,39 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 				rerunInput.availableRaces = input.availableRaces;
 				rerunInput.SetTurn(_game.GetTurnNumber());
 
+				var simulator = new Simulator();
+				var playerInput = new BobsBuddyPlayer(rerunInput);
+				SetupInputPlayer(simulator, _game.Player, playerInput, _game.PlayerEntity, true);
+
+				// Clone the opponent captured for this combat (including any hidden info revealed during
+				// combat such as secrets or hand minions) into an independent input for the re-run.
+				var opponentInput = CreateRerunOpponentSnapshot(input.Opponent, rerunInput);
+				rerunInput.Player = playerInput;
+				rerunInput.Opponent = opponentInput;
+
+				DebugLog($"Re-run boards (turn {_turn}): player side={playerInput.Side.Count}, opponent side={opponentInput.Side.Count}");
+				DebugLog("Re-run player: " + string.Join(", ", playerInput.Side.Select(m => m.ToString())));
+				DebugLog("Re-run opponent: " + string.Join(", ", opponentInput.Side.Select(m => m.ToString())));
+				if(opponentInput.Side.Count == 0)
+					DebugLog("Re-run: the captured opponent board is empty, the result will not reflect the last combat.");
+
+				var timeAlloted = MaxTime;
+				bool IsLeapfroggerCombo(IEnumerable<Minion>? side)
+				{
+					if(side == null)
+						return false;
+					var list = side.ToList();
+					return list.Count >= 3 && list.Any(x => x.CardID == NonCollectible.Neutral.Leapfrogger);
+				}
+				if(IsLeapfroggerCombo(playerInput.Side) || IsLeapfroggerCombo(opponentInput.Side))
+					timeAlloted = MaxTimeForLeapfrogger;
+				else if(playerInput.Side.Count >= 6 || opponentInput.Side.Count >= 6)
+					timeAlloted = MaxTimeForComplexBoards;
+
 				BobsBuddyDisplay.SetErrorState(BobsBuddyErrorState.None, null, true);
 				BobsBuddyDisplay.HidePercentagesShowSpinners();
 
-				var result = await new SimulationRunner().SimulateMultiThreaded(rerunInput, Iterations, ThreadCount, MaxTime);
+				var result = await new SimulationRunner().SimulateMultiThreaded(rerunInput, Iterations, ThreadCount, timeAlloted);
 				if(result == null)
 				{
 					BobsBuddyDisplay.ShowPercentagesHideSpinners();
@@ -517,9 +535,9 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 		/// simulator (which also clones their enchantments); the remaining lists only hold read-only data
 		/// objects that the simulation clones for every fight, so they can be shared.
 		/// </summary>
-		private static BobsBuddyPlayer CreateRerunOpponentSnapshot(BobsBuddyPlayer source)
+		private static BobsBuddyPlayer CreateRerunOpponentSnapshot(BobsBuddyPlayer source, Input ownerInput)
 		{
-			var snapshot = new BobsBuddyPlayer(null);
+			var snapshot = new BobsBuddyPlayer(ownerInput);
 			foreach(var property in typeof(BobsBuddyPlayer).GetProperties(BindingFlags.Public | BindingFlags.Instance))
 			{
 				if(!property.CanRead || !property.CanWrite)
@@ -1034,7 +1052,8 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			_pendingAutoAssemblerDeathrattleSources.Clear();
 			_pendingCrabDeathrattleSources.Clear();
 
-			_rerunOpponentSnapshot = null;
+			if(!_game.IsBattlegroundsDuosMatch)
+				_lastCombat = null;
 			LastAttackingHero = null;
 			_attackingHero = null;
 			_defendingHero = null;
@@ -1066,19 +1085,6 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 					SetupInputPlayer(simulator, _game.Opponent, input.Opponent, _game.OpponentEntity, false);
 					DuosInputPlayer = input.Player;
 					DuosInputOpponent = input.Opponent;
-
-					// Capture an independent copy of the board that is being fought, so the re-run button does
-					// not depend on the mutable state the simulation leaves behind.
-					try
-					{
-						_rerunOpponentSnapshot = CreateRerunOpponentSnapshot(input.Opponent);
-					}
-					catch(Exception e)
-					{
-						// The re-run button is optional; never let the snapshot break the combat simulation.
-						_rerunOpponentSnapshot = null;
-						DebugLog("Could not capture the opponent board for re-runs: " + e);
-					}
 					DuosInputPlayerTeammate = null;
 					DuosInputOpponentTeammate = null;
 				}
@@ -1119,6 +1125,8 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 			_input = input;
 			_turn = turn;
+			if(!_game.IsBattlegroundsDuosMatch)
+				_lastCombat = this;
 
 			// Flag checking it's possible to summon Malorne during combat (to optimize redundantly checking in TagChangeAction).
 			CurrentCombatMayHaveOpponentMalorne = input.Anomaly?.CardID == NonCollectible.Neutral.BringInTheBuddies;
