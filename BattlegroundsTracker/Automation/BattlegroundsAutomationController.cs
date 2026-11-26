@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using HearthDb.Enums;
 using Hearthstone_Deck_Tracker.BobsBuddy;
+using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation;
 using Hearthstone_Deck_Tracker.Hearthstone;
 using Hearthstone_Deck_Tracker.Utility.Logging;
 
@@ -21,6 +22,8 @@ namespace Hearthstone_Deck_Tracker.Automation
 		private static int _lastTurn2UpgradeAttemptedGameHash;
 		private static bool _isBusy;
 
+		private static AutomationLogViewModel? UiLog => Core.Overlay?.AutomationLogVM;
+
 		internal static bool IsBusy
 		{
 			get
@@ -28,6 +31,23 @@ namespace Hearthstone_Deck_Tracker.Automation
 				lock(Sync)
 					return _isBusy;
 			}
+		}
+
+		private static void EmitLog(string message, AutomationLogLevel level = AutomationLogLevel.Info)
+		{
+			if(level == AutomationLogLevel.Error)
+				Log.Error($"[Automation] {message}");
+			else if(level == AutomationLogLevel.Warning)
+				Log.Warn($"[Automation] {message}");
+			else
+				Log.Info($"[Automation] {message}");
+
+			UiLog?.AddLog(message, level);
+		}
+
+		private static void SetStatus(string status, AutomationLogLevel level = AutomationLogLevel.Info, bool isBusy = false)
+		{
+			UiLog?.SetStatus(status, level, isBusy);
 		}
 
 		internal static void CancelActive(string reason)
@@ -40,7 +60,8 @@ namespace Hearthstone_Deck_Tracker.Automation
 			}
 			if(toCancel != null)
 			{
-				Log.Info($"Automation: cancelling active task ({reason})");
+				EmitLog($"中止当前任务：{reason}", AutomationLogLevel.Warning);
+				SetStatus("已中止", AutomationLogLevel.Warning, isBusy: false);
 				try
 				{
 					toCancel.Cancel();
@@ -53,17 +74,36 @@ namespace Hearthstone_Deck_Tracker.Automation
 
 		internal static void OnShoppingTurnStart(GameV2 game, int turn)
 		{
-			CancelActive("new shopping turn");
+			CancelActive("进入新回合");
 
 			if(!game.IsBattlegroundsMatch || game.IsBattlegroundsDuosMatch)
 				return;
 
-			if(turn == 2 && Config.Instance.BgsAutoUpgradeTurn2)
-				_ = TryAutoUpgradeTurn2Async(game);
+			var tier = game.Player.Hero?.GetTag(GameTag.PLAYER_TECH_LEVEL) ?? 0;
+			var gold = GetAvailableGold(game);
+			SetStatus($"购物中 (T{turn})", AutomationLogLevel.Info, isBusy: false);
+			EmitLog($"第 {turn} 回合购物开始（{tier} 本，可用金币 {gold}）");
+
+			if(turn == 2)
+			{
+				if(Config.Instance.BgsAutoUpgradeTurn2)
+					_ = TryAutoUpgradeTurn2Async(game);
+				else
+					EmitLog("T2 自动升本未开启（可在设置中启用）");
+			}
 		}
 
-		internal static void OnCombatStart() => CancelActive("combat started");
-		internal static void OnGameEnd() => CancelActive("game ended");
+		internal static void OnCombatStart()
+		{
+			CancelActive("战斗开始");
+			SetStatus("战斗中", AutomationLogLevel.Info, isBusy: false);
+		}
+
+		internal static void OnGameEnd()
+		{
+			CancelActive("对局结束");
+			SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
+		}
 
 		private static async Task TryAutoUpgradeTurn2Async(GameV2 game)
 		{
@@ -77,6 +117,9 @@ namespace Hearthstone_Deck_Tracker.Automation
 
 			try
 			{
+				SetStatus("T2 准备升本...", AutomationLogLevel.Busy, isBusy: true);
+				EmitLog("T2 自动升本：等待过场动画 (1.2s)...", AutomationLogLevel.Busy);
+
 				// Wait for the turn-start shopping transition animation to finish before clicking.
 				await Task.Delay(1200, ct.Value);
 
@@ -86,7 +129,8 @@ namespace Hearthstone_Deck_Tracker.Automation
 				var currentTier = game.Player.Hero?.GetTag(GameTag.PLAYER_TECH_LEVEL) ?? 0;
 				if(currentTier != 1)
 				{
-					Log.Info($"Automation(T2 Upgrade): skipped, current tavern tier is {currentTier}.");
+					EmitLog($"T2 跳过升本：当前已是 {currentTier} 本", AutomationLogLevel.Warning);
+					SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
 					return;
 				}
 
@@ -94,7 +138,8 @@ namespace Hearthstone_Deck_Tracker.Automation
 					e.IsInPlay && (e.CardId?.StartsWith("TB_BaconShopTechUp", StringComparison.Ordinal) ?? false));
 				if(upgradeButton == null)
 				{
-					Log.Info("Automation(T2 Upgrade): skipped, tavern upgrade button entity not found in play.");
+					EmitLog("T2 跳过升本：未检测到升本按钮实体", AutomationLogLevel.Warning);
+					SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
 					return;
 				}
 
@@ -102,32 +147,47 @@ namespace Hearthstone_Deck_Tracker.Automation
 				var availableGold = GetAvailableGold(game);
 				if(upgradeCost <= 0 || availableGold < upgradeCost)
 				{
-					Log.Info($"Automation(T2 Upgrade): skipped, available gold ({availableGold}) < upgrade cost ({upgradeCost}).");
+					EmitLog($"T2 跳过升本：金币不足 ({availableGold}/{upgradeCost})", AutomationLogLevel.Warning);
+					SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
 					return;
 				}
 
 				if(!BattlegroundsBoardCoordinates.TryGetClientRect(out var clientRect))
 				{
-					Log.Warn("Automation(T2 Upgrade): skipped, Hearthstone window rect unavailable.");
+					EmitLog("T2 跳过升本：无法获取炉石窗口区域", AutomationLogLevel.Warning);
+					SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
 					return;
 				}
 
 				_lastTurn2UpgradeAttemptedGameHash = gameHash;
 				var target = BattlegroundsBoardCoordinates.GetTavernUpgradeButton(clientRect);
-				Log.Info($"Automation(T2 Upgrade): clicking tavern upgrade at ({target.X}, {target.Y}) (gold={availableGold}, cost={upgradeCost}).");
+				SetStatus("T2 点击升本...", AutomationLogLevel.Busy, isBusy: true);
+				EmitLog($"T2 点击升本按钮 ({target.X}, {target.Y})，费用 {upgradeCost} 金", AutomationLogLevel.Busy);
 				await InputController.ClickAsync(target, ct.Value);
 
 				await Task.Delay(500, ct.Value);
 				var newTier = game.Player.Hero?.GetTag(GameTag.PLAYER_TECH_LEVEL) ?? 0;
-				Log.Info($"Automation(T2 Upgrade): post-click tavern tier = {newTier}.");
+				if(newTier >= 2)
+				{
+					EmitLog($"T2 自动升本成功：当前 {newTier} 本", AutomationLogLevel.Success);
+					SetStatus($"已升至 {newTier} 本", AutomationLogLevel.Success, isBusy: false);
+				}
+				else
+				{
+					EmitLog($"T2 已点击升本，但当前仍为 {newTier} 本（可能坐标需微调）", AutomationLogLevel.Warning);
+					SetStatus("升本未生效", AutomationLogLevel.Warning, isBusy: false);
+				}
 			}
 			catch(OperationCanceledException ex)
 			{
-				Log.Info($"Automation(T2 Upgrade): aborted ({ex.Message})");
+				EmitLog($"T2 自动升本已中止：{ex.Message}", AutomationLogLevel.Warning);
+				SetStatus("已中止", AutomationLogLevel.Warning, isBusy: false);
 			}
 			catch(Exception ex)
 			{
-				Log.Error($"Automation(T2 Upgrade): {ex}");
+				EmitLog($"T2 自动升本异常：{ex.Message}", AutomationLogLevel.Error);
+				Log.Error(ex);
+				SetStatus("执行异常", AutomationLogLevel.Error, isBusy: false);
 			}
 			finally
 			{
@@ -138,12 +198,15 @@ namespace Hearthstone_Deck_Tracker.Automation
 		internal static async Task OptimizeAndApplyPositioningAsync()
 		{
 			if(!BobsBuddyInvoker.CanRerunLastCombat)
+			{
+				EmitLog("当前无法优化站位（需在购物阶段且有上轮对手记录）", AutomationLogLevel.Warning);
 				return;
+			}
 
 			var ct = BeginTask();
 			if(ct == null)
 			{
-				Log.Info("Automation(Positioning): another automation task is already running.");
+				EmitLog("已有自动操作正在执行，请等待或按 F8 中止", AutomationLogLevel.Warning);
 				return;
 			}
 
@@ -152,7 +215,14 @@ namespace Hearthstone_Deck_Tracker.Automation
 			{
 				var context = BobsBuddyInvoker.TryCreateRerunContext();
 				if(context == null)
+				{
+					EmitLog("未能读取当前阵容或上轮对手数据", AutomationLogLevel.Warning);
+					SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
 					return;
+				}
+
+				SetStatus("搜索最优站位...", AutomationLogLevel.Busy, isBusy: true);
+				EmitLog($"开始搜索最优站位（我方 {context.PlayerEntityIds.Length} 怪 vs 第 {context.CombatTurn} 回合对手）...", AutomationLogLevel.Busy);
 
 				display.SetErrorState(BobsBuddyErrorState.None, null, true);
 				display.HidePercentagesShowSpinners();
@@ -161,6 +231,8 @@ namespace Hearthstone_Deck_Tracker.Automation
 				if(result == null)
 				{
 					display.ShowPercentagesHideSpinners();
+					EmitLog("站位模拟未返回结果", AutomationLogLevel.Warning);
+					SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
 					return;
 				}
 
@@ -172,29 +244,44 @@ namespace Hearthstone_Deck_Tracker.Automation
 					result.BestOutput.myDeathRate,
 					result.BestOutput.damageResults.ToList());
 
+				var baseWin = result.BaselineOutput.winRate * 100;
+				var bestWin = result.BestOutput.winRate * 100;
+				var baseTie = result.BaselineOutput.tieRate * 100;
+				var bestTie = result.BestOutput.tieRate * 100;
+
 				if(!result.ShouldReorder)
 				{
-					Log.Info("Automation(Positioning): current board is already optimal (or gain < threshold).");
+					EmitLog($"当前站位已接近最优（胜 {baseWin:0.#}% / 平 {baseTie:0.#}%），无需调整", AutomationLogLevel.Success);
+					SetStatus("站位已最优", AutomationLogLevel.Success, isBusy: false);
 					return;
 				}
 
+				var recommendedNames = string.Join(" → ", result.BestEntityIds.Select(id => GetEntityDisplayName(Core.Game, id)));
+				EmitLog($"找到更优站位：胜 {baseWin:0.#}% → {bestWin:0.#}%（平 {bestTie:0.#}%）", AutomationLogLevel.Success);
+				EmitLog($"推荐顺序：{recommendedNames}");
+
 				if(!Config.Instance.BgsAutoPositioningApply)
 				{
-					Log.Info("Automation(Positioning): dry-run mode enabled (BgsAutoPositioningApply=false), skipping mouse drags. "
-						+ "Recommended order entity IDs: " + string.Join(", ", result.BestEntityIds));
+					EmitLog("仅模拟模式（未开启自动拖拽），跳过操作", AutomationLogLevel.Info);
+					SetStatus("测算完成", AutomationLogLevel.Success, isBusy: false);
 					return;
 				}
 
 				await ApplyBoardOrderAsync(Core.Game, result.BestEntityIds, ct.Value);
+				EmitLog("最优站位调整完成", AutomationLogLevel.Success);
+				SetStatus($"已调优 ({bestWin:0.#}%胜)", AutomationLogLevel.Success, isBusy: false);
 			}
 			catch(OperationCanceledException ex)
 			{
-				Log.Info($"Automation(Positioning): aborted ({ex.Message})");
+				EmitLog($"站位优化已中止：{ex.Message}", AutomationLogLevel.Warning);
+				SetStatus("已中止", AutomationLogLevel.Warning, isBusy: false);
 				display.ShowPercentagesHideSpinners();
 			}
 			catch(Exception ex)
 			{
-				Log.Error($"Automation(Positioning): {ex}");
+				EmitLog($"站位优化异常：{ex.Message}", AutomationLogLevel.Error);
+				Log.Error(ex);
+				SetStatus("执行异常", AutomationLogLevel.Error, isBusy: false);
 				display.ShowPercentagesHideSpinners();
 			}
 			finally
@@ -208,15 +295,16 @@ namespace Hearthstone_Deck_Tracker.Automation
 			var initialIds = GetLivePlayerBoardEntityIds(game);
 			if(initialIds.Length != targetEntityIds.Length || !new HashSet<int>(initialIds).SetEquals(targetEntityIds))
 			{
-				Log.Warn("Automation(Positioning): player board changed while optimizing, skipping drags.");
+				EmitLog("搜索期间场面已变化，放弃自动拖拽", AutomationLogLevel.Warning);
 				return;
 			}
 
 			var plannedMoves = PositioningOptimizer.PlanMinimalMoves(initialIds, targetEntityIds);
-			Log.Info($"Automation(Positioning): applying {plannedMoves.Count} drag move(s) to reach optimal board.");
+			EmitLog($"规划最少拖拽步骤：共 {plannedMoves.Count} 步", AutomationLogLevel.Busy);
 
-			foreach(var move in plannedMoves)
+			for(var step = 0; step < plannedMoves.Count; step++)
 			{
+				var move = plannedMoves[step];
 				if(game.IsBattlegroundsCombatPhase)
 					throw new OperationCanceledException("已进入战斗阶段，停止调整站位。");
 
@@ -236,15 +324,30 @@ namespace Hearthstone_Deck_Tracker.Automation
 
 				var fromPt = BattlegroundsBoardCoordinates.GetPlayerMinionSlot(clientRect, liveIds.Length, liveFrom);
 				var toPt = BattlegroundsBoardCoordinates.GetPlayerMinionDropTarget(clientRect, liveIds.Length, move.TargetIndex);
+				var name = GetEntityDisplayName(game, move.EntityId);
 
-				Log.Info($"Automation(Positioning): dragging entity {move.EntityId} from slot {liveFrom} ({fromPt.X},{fromPt.Y}) to slot {move.TargetIndex} ({toPt.X},{toPt.Y}).");
+				SetStatus($"拖拽中 ({step + 1}/{plannedMoves.Count})...", AutomationLogLevel.Busy, isBusy: true);
+				EmitLog($"拖拽 [{name}] 位置 {liveFrom + 1} → {move.TargetIndex + 1} ({fromPt.X},{fromPt.Y} → {toPt.X},{toPt.Y})", AutomationLogLevel.Busy);
 				await InputController.DragAsync(fromPt, toPt, ct);
 
 				// Wait briefly for Power.log ZONE_POSITION to reflect the drag before starting the next one.
 				var settled = await WaitForEntityPositionAsync(game, move.EntityId, move.TargetIndex, timeoutMs: 800, ct);
 				if(!settled)
-					Log.Warn($"Automation(Positioning): entity {move.EntityId} did not confirm slot {move.TargetIndex} within timeout; continuing cautiously.");
+					EmitLog($"[{name}] 未在 0.8s 内确认落位 {move.TargetIndex + 1}，继续下一步", AutomationLogLevel.Warning);
 			}
+		}
+
+		private static string GetEntityDisplayName(GameV2 game, int entityId)
+		{
+			if(game.Entities.TryGetValue(entityId, out var entity))
+			{
+				var localized = entity.LatestCard.LocalizedName;
+				if(!string.IsNullOrWhiteSpace(localized))
+					return localized!;
+				if(!string.IsNullOrWhiteSpace(entity.Name))
+					return entity.Name!;
+			}
+			return $"#{entityId}";
 		}
 
 		private static async Task<bool> WaitForEntityPositionAsync(GameV2 game, int entityId, int expectedZeroBasedIndex, int timeoutMs, CancellationToken ct)

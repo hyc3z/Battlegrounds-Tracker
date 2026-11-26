@@ -17,6 +17,7 @@ using HearthDb.Enums;
 using HearthMirror.Objects;
 using Hearthstone_Deck_Tracker.Annotations;
 using Hearthstone_Deck_Tracker.Controls;
+using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation;
 using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.ChinaModule;
 using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Guides;
 using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Guides.Anomalies;
@@ -77,6 +78,7 @@ namespace Hearthstone_Deck_Tracker.Windows
 		private bool? _tavernMarkersPanelExpandedBeforeTimewarp;
 		private OverlayElementBehavior _bgsBobsBuddyBehavior;
 		private OverlayElementBehavior _bgsChinaModuleBehavior;
+		private OverlayElementBehavior _bgsAutomationLogBehavior;
 		private OverlayElementBehavior _bgsPastOpponentBoardBehavior;
 		private OverlayElementBehavior _tier7PreLobbyBehavior;
 		private OverlayElementBehavior _battlegroundsInspirationBehavior;
@@ -103,6 +105,7 @@ namespace Hearthstone_Deck_Tracker.Windows
 		public BattlegroundsMinionPinningViewModel BattlegroundsMinionPinningViewModel { get; } = new BattlegroundsMinionPinningViewModel();
 
 		public ChinaModuleViewModel ChinaModuleVM { get; } = new();
+		public AutomationLogViewModel AutomationLogVM { get; } = new();
 
 		public OverlayWindow(GameV2 game)
 		{
@@ -224,6 +227,18 @@ namespace Hearthstone_Deck_Tracker.Windows
 			_bgsChinaModuleBehavior = new OverlayElementBehavior(ChinaModulePanel)
 			{
 				GetLeft = () => 0,
+				GetTop = () => 0,
+				GetScaling = () => AutoScaling,
+				AnchorSide = Side.Top,
+				EntranceAnimation = AnimationType.Slide,
+				ExitAnimation = AnimationType.Slide,
+			};
+
+			_bgsAutomationLogBehavior = new OverlayElementBehavior(AutomationLogPanel)
+			{
+				GetLeft = () => (Config.Instance.ShowChinaModuleOverlay == true && ChinaModulePanel.Visibility == Visible)
+					? 220 * AutoScaling
+					: 8 * AutoScaling,
 				GetTop = () => 0,
 				GetScaling = () => AutoScaling,
 				AnchorSide = Side.Top,
@@ -827,6 +842,7 @@ namespace Hearthstone_Deck_Tracker.Windows
 			ShowBgsTopBar();
 			UpdateBobsBuddyPanelVisibility();
 			UpdateBgsChinaModulePanel();
+			UpdateBgsAutomationLogPanel();
 
 			// starting HDT mid-match, IsBattlegroundsMatch was still unknown when the scene event fired
 			UpdateBattlegroundsSessionVisibility();
@@ -865,6 +881,7 @@ namespace Hearthstone_Deck_Tracker.Windows
 
 			ChinaModuleVM.Reset();
 			HideBgsChinaModulePanel();
+			HideBgsAutomationLogPanel();
 		}
 
 		private bool _bgsTopBarTeardownPending;
@@ -942,6 +959,25 @@ namespace Hearthstone_Deck_Tracker.Windows
 		{
 			_bgsChinaModuleBehavior.Hide();
 			ChinaModuleVM.Reset();
+		}
+
+		internal void UpdateBgsAutomationLogPanel()
+		{
+			if(_game.IsBattlegroundsMatch && Config.Instance.ShowBgsAutomationLogOverlay)
+			{
+				_bgsAutomationLogBehavior.UpdatePosition();
+				_bgsAutomationLogBehavior.Show();
+			}
+			else
+			{
+				_bgsAutomationLogBehavior.Hide();
+			}
+		}
+
+		internal void HideBgsAutomationLogPanel()
+		{
+			_bgsAutomationLogBehavior.Hide();
+			AutomationLogVM.Reset();
 		}
 
 		public void ShowBgsInspiration()

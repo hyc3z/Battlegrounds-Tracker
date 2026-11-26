@@ -923,6 +923,9 @@ namespace Hearthstone_Deck_Tracker
 		[DefaultValue(true)]
 		public bool BgsAutoPositioningApply = true;
 
+		[DefaultValue(true)]
+		public bool ShowBgsAutomationLogOverlay = true;
+
 		[DefaultValue(false)]
 		public bool BattlegroundsSessionRecapWindowOnStart = false;
 

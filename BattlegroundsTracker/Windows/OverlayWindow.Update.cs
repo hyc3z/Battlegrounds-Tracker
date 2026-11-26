@@ -294,6 +294,9 @@ namespace Hearthstone_Deck_Tracker.Windows
 			_bgsChinaModuleBehavior.UpdatePosition();
 			_bgsChinaModuleBehavior.UpdateScaling();
 
+			_bgsAutomationLogBehavior.UpdatePosition();
+			_bgsAutomationLogBehavior.UpdateScaling();
+
 			BattlegroundsHeroPickingViewModel.Scaling = scaling;
 			BattlegroundsHeroPicking.Width = Width / scaling;
 			BattlegroundsHeroPicking.Height = Height / scaling;

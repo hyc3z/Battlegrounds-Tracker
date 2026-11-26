@@ -18,6 +18,7 @@
         xmlns:minions="clr-namespace:Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Minions"
         xmlns:anomalies="clr-namespace:Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Guides.Anomalies"
         xmlns:chinaModule="clr-namespace:Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.ChinaModule"
+        xmlns:bgsAutomation="clr-namespace:Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation"
         xmlns:minionPinning="clr-namespace:Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.MinionPinning"
         lex:LocalizeDictionary.DesignCulture="en"
         lex:ResxLocalizationProvider.DefaultAssembly="BattlegroundsTracker"
@@ -286,6 +287,8 @@
 
                 <chinaModule:ChinaModulePanel x:Name="ChinaModulePanel" Canvas.Top="0" Canvas.Left="0" Visibility="Collapsed" ext:OverlayExtensions.IsOverlayHitTestVisible="True"
                                               DataContext="{Binding ChinaModuleVM, RelativeSource={RelativeSource AncestorType=windows:OverlayWindow}}"/>
+                <bgsAutomation:AutomationLogPanel x:Name="AutomationLogPanel" Canvas.Top="0" Canvas.Left="220" Visibility="Collapsed" ext:OverlayExtensions.IsOverlayHitTestVisible="True"
+                                                  DataContext="{Binding AutomationLogVM, RelativeSource={RelativeSource AncestorType=windows:OverlayWindow}}"/>
 
                 <!-- hover trigger region shadowing BgsTopBar, a visible mask swallows hover
                      events for the whole top right corner (minion browser, top bar buttons) -->

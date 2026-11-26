@@ -92,6 +92,7 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			CheckboxShowResultsDuringShopping.IsChecked = Config.Instance.ShowBobsBuddyDuringShopping;
 			CheckboxAlwaysShowAverageDamage.IsChecked = Config.Instance.AlwaysShowAverageDamage;
 
+			CheckboxShowBgsAutomationLogOverlay.IsChecked = Config.Instance.ShowBgsAutomationLogOverlay;
 			CheckboxBgsAutoUpgradeTurn2.IsChecked = Config.Instance.BgsAutoUpgradeTurn2;
 			CheckboxBgsAutoPositioningApply.IsChecked = Config.Instance.BgsAutoPositioningApply;
 
@@ -155,7 +156,10 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			Config.Instance.ShowChinaModuleOverlay = true;
 			SaveConfig(true);
 			if(Core.Game.IsBattlegroundsMatch)
+			{
 				Core.Overlay.ChinaModulePanel.Visibility = Visibility.Visible;
+				Core.Overlay.UpdateBgsAutomationLogPanel();
+			}
 		}
 
 		private void CheckboxCheckboxShowChinaModuleOverlay_Unchecked(object sender, RoutedEventArgs e)
@@ -166,7 +170,28 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			Config.Instance.ShowChinaModuleOverlay = false;
 			SaveConfig(true);
 			if(Core.Game.IsBattlegroundsMatch)
+			{
 				Core.Overlay.ChinaModulePanel.Visibility = Visibility.Collapsed;
+				Core.Overlay.UpdateBgsAutomationLogPanel();
+			}
+		}
+
+		private void CheckboxShowBgsAutomationLogOverlay_Checked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.ShowBgsAutomationLogOverlay = true;
+			SaveConfig(true);
+			Core.Overlay.UpdateBgsAutomationLogPanel();
+		}
+
+		private void CheckboxShowBgsAutomationLogOverlay_Unchecked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.ShowBgsAutomationLogOverlay = false;
+			SaveConfig(true);
+			Core.Overlay.UpdateBgsAutomationLogPanel();
 		}
 
 		private void CheckboxBgsAutoUpgradeTurn2_Checked(object sender, RoutedEventArgs e)
