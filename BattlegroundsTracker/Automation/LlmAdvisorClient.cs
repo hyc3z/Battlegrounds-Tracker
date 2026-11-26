@@ -69,7 +69,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 				Config.Instance.BgsLlmModel,
 				SystemPrompt,
 				statePrompt,
-				maxTokens: 450,
+				maxTokens: 2048,
 				ct);
 
 		internal static Task<LlmAdviceResponse> TestConnectionAsync(string baseUrl, string apiKey, string model, CancellationToken ct)
@@ -79,7 +79,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 				model,
 				"你是一个连接测试助手。",
 				"请只回复：连接正常",
-				maxTokens: 32,
+				maxTokens: 256,
 				ct);
 
 		private static async Task<LlmAdviceResponse> SendChatAsync(
@@ -100,19 +100,25 @@ namespace Hearthstone_Deck_Tracker.Automation
 
 			try
 			{
-				var payload = new
+				var payload = new JObject
 				{
-					model = resolvedModel,
-					temperature = 0.3,
-					max_tokens = maxTokens,
-					messages = new object[]
+					["model"] = resolvedModel,
+					["temperature"] = 0.3,
+					["max_tokens"] = maxTokens,
+					["messages"] = new JArray
 					{
-						new { role = "system", content = systemPrompt },
-						new { role = "user", content = userPrompt }
+						new JObject { ["role"] = "system", ["content"] = systemPrompt },
+						new JObject { ["role"] = "user", ["content"] = userPrompt }
 					}
 				};
 
-				var json = JsonConvert.SerializeObject(payload);
+				// DeepSeek V4.1-Flash enables thinking mode by default; reasoning_content shares the
+				// max_tokens budget and can exhaust it before emitting content. Disable thinking for
+				// low-latency real-time turn advice on deepseek-flash.
+				if(resolvedModel.IndexOf("deepseek-flash", StringComparison.OrdinalIgnoreCase) >= 0)
+					payload["thinking"] = new JObject { ["type"] = "disabled" };
+
+				var json = payload.ToString(Formatting.None);
 				using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
 				{
 					Content = new StringContent(json, Encoding.UTF8, "application/json")
@@ -131,9 +137,19 @@ namespace Hearthstone_Deck_Tracker.Automation
 				}
 
 				var parsed = JObject.Parse(body);
-				var content = parsed["choices"]?[0]?["message"]?["content"]?.Value<string>()?.Trim();
+				var message = parsed["choices"]?[0]?["message"];
+				var finishReason = parsed["choices"]?[0]?["finish_reason"]?.Value<string>() ?? "";
+				var content = message?["content"]?.Value<string>()?.Trim();
+				var reasoning = message?["reasoning_content"]?.Value<string>()?.Trim();
+
 				if(string.IsNullOrEmpty(content))
-					return new LlmAdviceResponse(false, "模型返回内容为空。", sw.ElapsedMilliseconds);
+				{
+					Hearthstone_Deck_Tracker.Utility.Logging.Log.Warn(
+						$"[Automation/LLM] Empty content (finish_reason={finishReason}, reasoningLen={reasoning?.Length ?? 0}): {body.Substring(0, Math.Min(400, body.Length))}");
+					if(!string.IsNullOrEmpty(reasoning))
+						return new LlmAdviceResponse(true, reasoning!, sw.ElapsedMilliseconds);
+					return new LlmAdviceResponse(false, $"模型返回内容为空（finish_reason={finishReason}）。", sw.ElapsedMilliseconds);
+				}
 
 				return new LlmAdviceResponse(true, content!, sw.ElapsedMilliseconds);
 			}

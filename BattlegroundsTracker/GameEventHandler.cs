@@ -2415,7 +2415,11 @@ namespace Hearthstone_Deck_Tracker
 			var card = Database.GetCardFromId(cardId);
 			if(card != null)
 			{
-				if(_game.IsBattlegroundsMatch && !_game.IsBattlegroundsCombatPhase && !cardId.StartsWith("TB_BaconShop", StringComparison.Ordinal))
+				if(_game.IsBattlegroundsMatch
+					&& !_game.IsBattlegroundsCombatPhase
+					&& _game.GetTurnNumber() > 0
+					&& !entity.IsHero
+					&& !cardId.StartsWith("TB_BaconShop", StringComparison.Ordinal))
 					BattlegroundsActionHistory.Record(_game.GetTurnNumber(), $"入手/购入 [{card.LocalizedName ?? cardId}]");
 				GameEvents.OnPlayerGet.Execute(card);
 			}

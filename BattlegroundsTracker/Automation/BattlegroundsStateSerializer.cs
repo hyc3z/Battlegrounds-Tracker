@@ -143,7 +143,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 						if(s.IsMinion)
 							sb.AppendLine($"{i + 1}. [随从]{frozen} {FormatMinion(s, includeCost: true)}");
 						else
-							sb.AppendLine($"{i + 1}. [酒馆法术]{frozen} {GetCardName(s)}（{s.GetTag(GameTag.COST)}费）：{CompactText(s.LatestCard.Text)}");
+							sb.AppendLine($"{i + 1}. [酒馆法术]{frozen} {GetCardName(s)}（{s.GetTag(GameTag.COST)}费）：{CompactText(s.LatestCard.Text, s)}");
 					}
 				}
 			}
@@ -199,7 +199,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 			if(e.HasTag(GameTag.STEALTH)) tags.Add("潜行");
 
 			var tagStr = tags.Count > 0 ? $"（{string.Join("/", tags)}）" : "";
-			var text = CompactText(e.LatestCard.Text);
+			var text = CompactText(e.LatestCard.Text, e);
 			var textStr = string.IsNullOrEmpty(text) ? "" : $" — {text}";
 			return $"{golden}{name} {atk}/{hp}{tagStr}{textStr}";
 		}
@@ -216,11 +216,21 @@ namespace Hearthstone_Deck_Tracker.Automation
 			return entity.CardId ?? "未知";
 		}
 
-		private static string CompactText(string? text)
+		private static string CompactText(string? text, Entity? entity = null)
 		{
 			if(string.IsNullOrWhiteSpace(text))
 				return "";
-			return text!.Replace("\r", " ").Replace("\n", " ").Replace("  ", " ").Trim();
+			var cleaned = text!.Replace("\r", " ").Replace("\n", " ").Replace("  ", " ").Trim();
+			if(entity != null && cleaned.Contains("{"))
+			{
+				var n1 = entity.GetTag(GameTag.TAG_SCRIPT_DATA_NUM_1);
+				var n2 = entity.GetTag(GameTag.TAG_SCRIPT_DATA_NUM_2);
+				var n3 = entity.GetTag(GameTag.TAG_SCRIPT_DATA_NUM_3);
+				if(n1 != 0) cleaned = cleaned.Replace("{0}", n1.ToString());
+				if(n2 != 0) cleaned = cleaned.Replace("{1}", n2.ToString());
+				if(n3 != 0) cleaned = cleaned.Replace("{2}", n3.ToString());
+			}
+			return cleaned;
 		}
 
 		private static string TranslateRace(Race race) => race switch
