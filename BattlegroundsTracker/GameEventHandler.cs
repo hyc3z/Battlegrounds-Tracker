@@ -639,7 +639,10 @@ namespace Hearthstone_Deck_Tracker
 		private DateTime _lastGameStartTimestamp = DateTime.MinValue;
 		public void HandleGameStart(DateTime timestamp)
 		{
-			BattlegroundsActionHistory.Reset();
+			if(BattlegroundsMatchRecorder.HasUnfinishedCrashedMatch)
+				BattlegroundsActionHistory.Record(_game.GetTurnNumber(), "炉石闪退后已重连回对局");
+			else
+				BattlegroundsActionHistory.Reset();
 			_game.InvalidateMatchInfoCache();
 			if(_game.CurrentGameMode == Practice && !_game.IsInMenu && !_handledGameEnd
 				&& _lastGameStartTimestamp > DateTime.MinValue && timestamp > _lastGameStartTimestamp)
@@ -819,7 +822,7 @@ namespace Hearthstone_Deck_Tracker
 				DeckManager.ResetAutoSelectCount();
 				if(_game.IsBattlegroundsMatch && stateComplete)
 				{
-					BattlegroundsAutomationController.OnGameEnd();
+					BattlegroundsAutomationController.OnGameEnd(_game);
 					BobsBuddyInvoker.GetInstance(_game.CurrentGameStats.GameId, _game.GetTurnNumber())?.StartShoppingAsync(true);
 					OpponentDeadForTracker.Reset();
 				}

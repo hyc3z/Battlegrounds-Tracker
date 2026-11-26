@@ -30,6 +30,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 				while(Entries.Count > MaxEntries)
 					Entries.RemoveAt(0);
 			}
+			BattlegroundsMatchRecorder.RecordAction(turn, action);
 		}
 
 		internal static List<string> GetRecent(int maxCount = 15)

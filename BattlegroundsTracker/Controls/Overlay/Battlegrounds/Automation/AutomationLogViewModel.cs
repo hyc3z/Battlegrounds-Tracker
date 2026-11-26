@@ -122,6 +122,8 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation
 
 		public ICommand AskAiCommand => new Command(() => _ = BattlegroundsAutomationController.RequestLlmAdviceAsync());
 
+		public ICommand ScreenshotCommand => new Command(() => _ = BattlegroundsAutomationController.CaptureManualScreenshotAsync());
+
 		public void SetStatus(string status, AutomationLogLevel level = AutomationLogLevel.Info, bool isBusy = false)
 		{
 			RunOnUiThread(() =>

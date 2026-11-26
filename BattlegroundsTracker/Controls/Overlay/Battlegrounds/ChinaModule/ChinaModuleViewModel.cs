@@ -264,6 +264,7 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.ChinaModule
 
 		        var serverInfo = Core.Game.MetaData.ServerInfo;
 		        HdtToolsActionState = HDTToolsActionState.InProgress;
+		        Hearthstone_Deck_Tracker.Automation.BattlegroundsAutomationController.NotifyReconnectTriggered();
 
 		        var succeeded = await BattlegroundsChinaModule.RunHDTTools(
 			        serverInfo.Address,

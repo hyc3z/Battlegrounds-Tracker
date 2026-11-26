@@ -277,7 +277,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 
 				State = BobsBuddyState.Combat;
-				BattlegroundsAutomationController.OnCombatStart();
+				BattlegroundsAutomationController.OnCombatStart(_game, _turn);
 				BobsBuddyDisplay.RefreshRerunVisibility();
 				DebugLog($"{_instanceKey} Waiting for state changes...");
 				await Task.Delay(StateChangeDelay);

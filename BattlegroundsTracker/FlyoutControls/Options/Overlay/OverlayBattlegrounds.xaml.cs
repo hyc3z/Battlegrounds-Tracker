@@ -95,8 +95,10 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			CheckboxAlwaysShowAverageDamage.IsChecked = Config.Instance.AlwaysShowAverageDamage;
 
 			CheckboxShowBgsAutomationLogOverlay.IsChecked = Config.Instance.ShowBgsAutomationLogOverlay;
+			CheckboxBgsAutoRestartOnCrash.IsChecked = Config.Instance.BgsAutoRestartOnCrash;
 			CheckboxBgsAutoUpgradeTurn2.IsChecked = Config.Instance.BgsAutoUpgradeTurn2;
 			CheckboxBgsAutoPositioningApply.IsChecked = Config.Instance.BgsAutoPositioningApply;
+			CheckboxBgsSaveMatchReviews.IsChecked = Config.Instance.BgsSaveMatchReviews;
 
 			TextBoxLlmBaseUrl.Text = Config.Instance.BgsLlmBaseUrl;
 			PasswordBoxLlmApiKey.Password = Config.Instance.BgsLlmApiKey;
@@ -232,6 +234,41 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			Config.Instance.BgsAutoPositioningApply = false;
 			SaveConfig(false);
 		}
+
+		private void CheckboxBgsAutoRestartOnCrash_Checked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsAutoRestartOnCrash = true;
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsAutoRestartOnCrash_Unchecked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsAutoRestartOnCrash = false;
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsSaveMatchReviews_Checked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsSaveMatchReviews = true;
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsSaveMatchReviews_Unchecked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsSaveMatchReviews = false;
+			SaveConfig(false);
+		}
+
+		private void BtnOpenMatchReviews_Click(object sender, RoutedEventArgs e)
+			=> BattlegroundsMatchRecorder.OpenReviewsFolder();
 
 		private void TextBoxLlmSettings_LostFocus(object sender, RoutedEventArgs e)
 		{

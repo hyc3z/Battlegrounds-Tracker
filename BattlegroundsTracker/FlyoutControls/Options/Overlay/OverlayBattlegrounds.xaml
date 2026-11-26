@@ -128,6 +128,10 @@
                           HorizontalAlignment="Left" VerticalAlignment="Top"
                           Checked="CheckboxShowBgsAutomationLogOverlay_Checked"
                           Unchecked="CheckboxShowBgsAutomationLogOverlay_Unchecked" Margin="0" />
+                <CheckBox x:Name="CheckboxBgsAutoRestartOnCrash" Content="重连或对局中炉石闪退时自动重启炉石"
+                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Checked="CheckboxBgsAutoRestartOnCrash_Checked"
+                          Unchecked="CheckboxBgsAutoRestartOnCrash_Unchecked" Margin="0,5,0,0" />
                 <CheckBox x:Name="CheckboxBgsAutoUpgradeTurn2" Content="第 2 回合自动升本 (T2 升 2 本)"
                           HorizontalAlignment="Left" VerticalAlignment="Top"
                           Checked="CheckboxBgsAutoUpgradeTurn2_Checked"
@@ -136,6 +140,15 @@
                           HorizontalAlignment="Left" VerticalAlignment="Top"
                           Checked="CheckboxBgsAutoPositioningApply_Checked"
                           Unchecked="CheckboxBgsAutoPositioningApply_Unchecked" Margin="0,5,0,0" />
+                <CheckBox x:Name="CheckboxBgsSaveMatchReviews" Content="自动保存对局复盘记录、日志与每回合多张截图"
+                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Checked="CheckboxBgsSaveMatchReviews_Checked"
+                          Unchecked="CheckboxBgsSaveMatchReviews_Unchecked" Margin="0,5,0,0" />
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button x:Name="BtnOpenMatchReviews" Content="打开复盘目录" Width="120" Click="BtnOpenMatchReviews_Click" />
+                    <TextBlock Text="每回合自动保存购物开始、购物过程与开战截图及 review.md / match.json"
+                               Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap" />
+                </StackPanel>
             </StackPanel>
         </GroupBox>
         <GroupBox Header="AI 教练 (OpenAI 兼容接口)" Margin="5,10,5,5">

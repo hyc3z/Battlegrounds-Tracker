@@ -977,7 +977,8 @@ namespace Hearthstone_Deck_Tracker.Windows
 		internal void HideBgsAutomationLogPanel()
 		{
 			_bgsAutomationLogBehavior.Hide();
-			AutomationLogVM.Reset();
+			if(!Hearthstone_Deck_Tracker.Automation.BattlegroundsMatchRecorder.HasUnfinishedCrashedMatch)
+				AutomationLogVM.Reset();
 		}
 
 		public void ShowBgsInspiration()

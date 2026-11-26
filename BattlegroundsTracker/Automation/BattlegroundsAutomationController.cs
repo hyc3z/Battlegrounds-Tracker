@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,22 +8,30 @@ using HearthDb.Enums;
 using Hearthstone_Deck_Tracker.BobsBuddy;
 using Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation;
 using Hearthstone_Deck_Tracker.Hearthstone;
+using Hearthstone_Deck_Tracker.Utility;
 using Hearthstone_Deck_Tracker.Utility.Logging;
 
 namespace Hearthstone_Deck_Tracker.Automation
 {
 	/// <summary>
-	/// Coordinates experimental v2 Battlegrounds automation rules and actions.
-	/// All actions are opt-in, shopping-phase only, foreground-gated, and cancelable via F8.
+	/// Coordinates experimental v2 Battlegrounds automation rules, LLM coach, crash auto-restart,
+	/// and match review recording. All actions are foreground-gated and cancelable via F8.
 	/// </summary>
 	internal static class BattlegroundsAutomationController
 	{
 		private static readonly object Sync = new();
+		private static readonly TimeSpan ReconnectCrashWindow = TimeSpan.FromSeconds(30);
+		private static readonly TimeSpan AutoRestartCooldown = TimeSpan.FromSeconds(20);
+
 		private static CancellationTokenSource? _activeCts;
 		private static CancellationTokenSource? _adviceCts;
 		private static int _lastTurn2UpgradeAttemptedGameHash;
+		private static DateTime _lastTurn2UpgradeAttemptedUtc = DateTime.MinValue;
+		private static DateTime _lastReconnectTriggeredUtc = DateTime.MinValue;
+		private static DateTime _lastAutoRestartUtc = DateTime.MinValue;
 		private static bool _isBusy;
 		private static bool _isAdvising;
+		private static bool _isRestartingHearthstone;
 
 		private static AutomationLogViewModel? UiLog => Core.Overlay?.AutomationLogVM;
 
@@ -45,11 +54,93 @@ namespace Hearthstone_Deck_Tracker.Automation
 				Log.Info($"[Automation] {message}");
 
 			UiLog?.AddLog(message, level);
+			BattlegroundsMatchRecorder.AppendLogLine(message);
 		}
 
 		private static void SetStatus(string status, AutomationLogLevel level = AutomationLogLevel.Info, bool isBusy = false)
 		{
 			UiLog?.SetStatus(status, level, isBusy);
+		}
+
+		internal static void NotifyReconnectTriggered()
+		{
+			lock(Sync)
+				_lastReconnectTriggeredUtc = DateTime.UtcNow;
+			EmitLog("已触发一键断线重连", AutomationLogLevel.Info);
+		}
+
+		internal static void OnHearthstoneExited(bool wasInBgsMatch)
+		{
+			CancelActive("炉石传说已退出");
+
+			bool recentlyReconnected;
+			bool shouldAutoRestart;
+			lock(Sync)
+			{
+				recentlyReconnected = _lastReconnectTriggeredUtc != DateTime.MinValue
+					&& DateTime.UtcNow - _lastReconnectTriggeredUtc <= ReconnectCrashWindow;
+				var cooldownElapsed = _lastAutoRestartUtc == DateTime.MinValue
+					|| DateTime.UtcNow - _lastAutoRestartUtc >= AutoRestartCooldown;
+				shouldAutoRestart = Config.Instance.BgsAutoRestartOnCrash
+					&& (wasInBgsMatch || recentlyReconnected)
+					&& cooldownElapsed
+					&& !_isRestartingHearthstone;
+				if(shouldAutoRestart)
+				{
+					_isRestartingHearthstone = true;
+					_lastAutoRestartUtc = DateTime.UtcNow;
+				}
+			}
+
+			if(wasInBgsMatch || recentlyReconnected)
+				BattlegroundsMatchRecorder.OnHearthstoneExitedMidMatch(shouldAutoRestart);
+
+			if(shouldAutoRestart)
+			{
+				SetStatus("闪退重启中...", AutomationLogLevel.Warning, isBusy: true);
+				EmitLog(recentlyReconnected
+					? "检测到断线重连后炉石闪退，准备自动重启炉石传说..."
+					: "检测到对局中炉石意外退出，准备自动重启炉石传说...", AutomationLogLevel.Warning);
+				_ = AutoRestartHearthstoneAsync();
+			}
+		}
+
+		private static async Task AutoRestartHearthstoneAsync()
+		{
+			try
+			{
+				// Wait for the crashing Hearthstone process to fully exit before asking Battle.net to relaunch.
+				await Task.Delay(1500);
+				for(var i = 0; i < 10; i++)
+				{
+					if(Process.GetProcessesByName("Hearthstone").Length == 0)
+						break;
+					await Task.Delay(500);
+				}
+
+				if(User32.GetHearthstoneWindow() != IntPtr.Zero)
+				{
+					EmitLog("炉石传说已在运行，取消自动重启", AutomationLogLevel.Info);
+					SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
+					return;
+				}
+
+				EmitLog("正在通过战网自动启动炉石传说...", AutomationLogLevel.Busy);
+				await HearthstoneRunner.StartHearthstone();
+				EmitLog("已发送炉石启动指令，等待自动重连回对局...", AutomationLogLevel.Success);
+				SetStatus("等待重连...", AutomationLogLevel.Busy, isBusy: false);
+			}
+			catch(Exception ex)
+			{
+				EmitLog($"自动重启炉石失败：{ex.Message}", AutomationLogLevel.Error);
+				Log.Error(ex);
+				SetStatus("重启失败", AutomationLogLevel.Error, isBusy: false);
+			}
+			finally
+			{
+				lock(Sync)
+					_isRestartingHearthstone = false;
+			}
 		}
 
 		internal static void CancelActive(string reason)
@@ -94,6 +185,8 @@ namespace Hearthstone_Deck_Tracker.Automation
 			if(!game.IsBattlegroundsMatch || game.IsBattlegroundsDuosMatch)
 				return;
 
+			BattlegroundsMatchRecorder.OnShoppingTurnStart(game, turn);
+
 			var tier = game.Player.Hero?.GetTag(GameTag.PLAYER_TECH_LEVEL) ?? 0;
 			var gold = GetAvailableGold(game);
 			SetStatus($"购物中 (T{turn})", AutomationLogLevel.Info, isBusy: false);
@@ -111,17 +204,28 @@ namespace Hearthstone_Deck_Tracker.Automation
 				_ = RequestLlmAdviceDelayedAsync(game, delayMs: 1600);
 		}
 
-		internal static void OnCombatStart()
+		internal static void OnCombatStart(GameV2 game, int turn)
 		{
 			CancelActive("战斗开始");
+			BattlegroundsMatchRecorder.OnCombatStart(game, turn);
 			SetStatus("战斗中", AutomationLogLevel.Info, isBusy: false);
 		}
 
-		internal static void OnGameEnd()
+		internal static void OnGameEnd(GameV2 game)
 		{
 			CancelActive("对局结束");
+			BattlegroundsMatchRecorder.OnGameEnd(game);
 			BattlegroundsActionHistory.Reset();
 			SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
+		}
+
+		internal static async Task CaptureManualScreenshotAsync()
+		{
+			var ok = await BattlegroundsMatchRecorder.CaptureManualScreenshotAsync(Core.Game);
+			if(ok)
+				EmitLog("已保存复盘截图", AutomationLogLevel.Success);
+			else
+				EmitLog("截图跳过（需在酒馆战棋对局中且炉石窗口在前台）", AutomationLogLevel.Warning);
 		}
 
 		private static async Task RequestLlmAdviceDelayedAsync(GameV2 game, int delayMs)
@@ -175,6 +279,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 				var response = await LlmAdvisorClient.RequestAdviceAsync(statePrompt, ct);
 				if(response.Success)
 				{
+					BattlegroundsMatchRecorder.RecordAiAdvice(game.GetTurnNumber(), response.Content);
 					EmitLog($"AI 建议（耗时 {response.ElapsedMs / 1000.0:0.1}s）：\n{response.Content}", AutomationLogLevel.Advice);
 					SetStatus($"AI 建议就绪 ({response.ElapsedMs / 1000.0:0.1}s)", AutomationLogLevel.Success, isBusy: false);
 				}
@@ -209,7 +314,8 @@ namespace Hearthstone_Deck_Tracker.Automation
 		private static async Task TryAutoUpgradeTurn2Async(GameV2 game)
 		{
 			var gameHash = game.CurrentGameStats?.GameId.GetHashCode() ?? 0;
-			if(gameHash != 0 && gameHash == _lastTurn2UpgradeAttemptedGameHash)
+			if((gameHash != 0 && gameHash == _lastTurn2UpgradeAttemptedGameHash)
+				|| DateTime.UtcNow - _lastTurn2UpgradeAttemptedUtc < TimeSpan.FromMinutes(2))
 				return;
 
 			var ct = BeginTask();
@@ -261,6 +367,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 				}
 
 				_lastTurn2UpgradeAttemptedGameHash = gameHash;
+				_lastTurn2UpgradeAttemptedUtc = DateTime.UtcNow;
 				var target = BattlegroundsBoardCoordinates.GetTavernUpgradeButton(clientRect);
 				SetStatus("T2 点击升本...", AutomationLogLevel.Busy, isBusy: true);
 				EmitLog($"T2 点击升本按钮 ({target.X}, {target.Y})，费用 {upgradeCost} 金", AutomationLogLevel.Busy);

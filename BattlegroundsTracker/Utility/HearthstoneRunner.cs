@@ -35,7 +35,7 @@ namespace Hearthstone_Deck_Tracker.Utility
 					for(var i = 0; i < StartBnetTries; i++)
 					{
 						bnetProc = GetProcess("Battle.net") ?? GetProcess("Battle.net.beta");
-						if(bnetProc != null && bnetProc.MainWindowHandle != IntPtr.Zero)
+						if(bnetProc != null)
 						{
 							if((foundDuration += ProcCheckInterval) >= ProcExistDuration)
 								break;
@@ -68,9 +68,10 @@ namespace Hearthstone_Deck_Tracker.Utility
 			}
 		}
 
-		private static Process GetProcess(string name)
+		private static Process? GetProcess(string name)
 		{
-			return Process.GetProcessesByName(name).FirstOrDefault(x => x.MainWindowHandle != IntPtr.Zero);
+			var procs = Process.GetProcessesByName(name);
+			return procs.FirstOrDefault(x => x.MainWindowHandle != IntPtr.Zero) ?? procs.FirstOrDefault();
 		}
 	}
 }

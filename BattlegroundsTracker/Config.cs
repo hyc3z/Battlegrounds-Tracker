@@ -938,6 +938,15 @@ namespace Hearthstone_Deck_Tracker
 		[DefaultValue(false)]
 		public bool BgsLlmAutoAdviseOnTurnStart = false;
 
+		[DefaultValue(true)]
+		public bool BgsAutoRestartOnCrash = true;
+
+		[DefaultValue(true)]
+		public bool BgsSaveMatchReviews = true;
+
+		[DefaultValue(20)]
+		public int BgsMatchReviewScreenshotIntervalSec = 20;
+
 		[DefaultValue(false)]
 		public bool BattlegroundsSessionRecapWindowOnStart = false;
 

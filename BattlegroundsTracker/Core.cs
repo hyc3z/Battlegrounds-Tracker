@@ -316,6 +316,7 @@ namespace Hearthstone_Deck_Tracker
 				}
 				else if(Game.IsRunning)
 				{
+					var wasInBgsMatch = Game.IsBattlegroundsMatch;
 					Game.IsRunning = false;
 					GameIsRunningChanged?.Invoke(false);
 					Overlay.UnhookGameWindow();
@@ -323,6 +324,7 @@ namespace Hearthstone_Deck_Tracker
 					SceneHandler.Reset();
 					Watchers.Stop();
 					Log.Info("Exited game");
+					Automation.BattlegroundsAutomationController.OnHearthstoneExited(wasInBgsMatch);
 					Game.CurrentRegion = Region.UNKNOWN;
 					LogWatcherManger.IsEnabled = true;
 					_notifyAccessDenied = true;
