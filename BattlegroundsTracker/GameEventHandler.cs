@@ -10,6 +10,7 @@ using System.Windows;
 using HearthDb.Enums;
 using HearthMirror;
 using Hearthstone_Deck_Tracker.API;
+using Hearthstone_Deck_Tracker.Automation;
 using Hearthstone_Deck_Tracker.Enums;
 using Hearthstone_Deck_Tracker.Hearthstone;
 using Hearthstone_Deck_Tracker.Hearthstone.Entities;
@@ -536,6 +537,7 @@ namespace Hearthstone_Deck_Tracker
 					Core.Overlay.BattlegroundsMinionsVM.OnTrinkets(Core.Game.Player.Trinkets.Select(x => x.Card.Id));
 					Core.Overlay.BattlegroundsInspirationViewModel.OnShoppingStart();
 					Core.Overlay.BgsMinionPinningShop.Visibility = Visibility.Visible;
+					BattlegroundsAutomationController.OnShoppingTurnStart(_game, turn.Item2);
 				}
 				switch(Config.Instance.TurnStartAction)
 				{
@@ -816,6 +818,7 @@ namespace Hearthstone_Deck_Tracker
 				DeckManager.ResetAutoSelectCount();
 				if(_game.IsBattlegroundsMatch && stateComplete)
 				{
+					BattlegroundsAutomationController.OnGameEnd();
 					BobsBuddyInvoker.GetInstance(_game.CurrentGameStats.GameId, _game.GetTurnNumber())?.StartShoppingAsync(true);
 					OpponentDeadForTracker.Reset();
 				}

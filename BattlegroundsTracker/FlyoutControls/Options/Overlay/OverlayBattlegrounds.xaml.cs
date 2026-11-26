@@ -92,6 +92,9 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			CheckboxShowResultsDuringShopping.IsChecked = Config.Instance.ShowBobsBuddyDuringShopping;
 			CheckboxAlwaysShowAverageDamage.IsChecked = Config.Instance.AlwaysShowAverageDamage;
 
+			CheckboxBgsAutoUpgradeTurn2.IsChecked = Config.Instance.BgsAutoUpgradeTurn2;
+			CheckboxBgsAutoPositioningApply.IsChecked = Config.Instance.BgsAutoPositioningApply;
+
 			CheckboxShowSessionRecap.IsChecked = Config.Instance.ShowSessionRecap;
 			CheckboxShowMinionsAvailable.IsChecked = Config.Instance.ShowSessionRecapMinionsAvailable;
 			CheckboxShowMinionsBanned.IsChecked = Config.Instance.ShowSessionRecapMinionsBanned;
@@ -164,6 +167,38 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			SaveConfig(true);
 			if(Core.Game.IsBattlegroundsMatch)
 				Core.Overlay.ChinaModulePanel.Visibility = Visibility.Collapsed;
+		}
+
+		private void CheckboxBgsAutoUpgradeTurn2_Checked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsAutoUpgradeTurn2 = true;
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsAutoUpgradeTurn2_Unchecked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsAutoUpgradeTurn2 = false;
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsAutoPositioningApply_Checked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsAutoPositioningApply = true;
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsAutoPositioningApply_Unchecked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsAutoPositioningApply = false;
+			SaveConfig(false);
 		}
 
 		private void CheckboxShowOverlayInBackground_Checked(object sender, RoutedEventArgs e)

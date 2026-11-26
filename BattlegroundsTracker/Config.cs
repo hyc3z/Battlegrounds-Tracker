@@ -918,6 +918,12 @@ namespace Hearthstone_Deck_Tracker
 		public bool? ShowChinaModuleOverlay = null;
 
 		[DefaultValue(false)]
+		public bool BgsAutoUpgradeTurn2 = false;
+
+		[DefaultValue(true)]
+		public bool BgsAutoPositioningApply = true;
+
+		[DefaultValue(false)]
 		public bool BattlegroundsSessionRecapWindowOnStart = false;
 
 		[DefaultValue(100)]

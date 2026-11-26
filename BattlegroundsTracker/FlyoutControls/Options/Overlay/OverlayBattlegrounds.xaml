@@ -122,6 +122,18 @@
                           Unchecked="CheckboxAlwaysShowAverageDamage_Unchecked" Margin="0,5,0,0" />
             </StackPanel>
         </GroupBox>
+        <GroupBox Header="V2 自动操作 (实验性)" Margin="5,10,5,5">
+            <StackPanel>
+                <CheckBox x:Name="CheckboxBgsAutoUpgradeTurn2" Content="第 2 回合自动升本 (T2 升 2 本)"
+                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Checked="CheckboxBgsAutoUpgradeTurn2_Checked"
+                          Unchecked="CheckboxBgsAutoUpgradeTurn2_Unchecked" Margin="0" />
+                <CheckBox x:Name="CheckboxBgsAutoPositioningApply" Content="点击最优站位按钮时自动拖拽调整 (F8 随时中止)"
+                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Checked="CheckboxBgsAutoPositioningApply_Checked"
+                          Unchecked="CheckboxBgsAutoPositioningApply_Unchecked" Margin="0,5,0,0" />
+            </StackPanel>
+        </GroupBox>
         <GroupBox Header="{lex:Loc Options_Overlay_Battlegrounds_Group_Label}" Margin="5,10,5,5">
             <StackPanel>
                 <CheckBox

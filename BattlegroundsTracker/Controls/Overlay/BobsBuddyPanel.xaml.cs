@@ -1,4 +1,5 @@
 using Hearthstone_Deck_Tracker.Annotations;
+using Hearthstone_Deck_Tracker.Automation;
 using Hearthstone_Deck_Tracker.BobsBuddy;
 using Hearthstone_Deck_Tracker.Utility;
 using Hearthstone_Deck_Tracker.Utility.MVVM;
@@ -323,6 +324,12 @@ private static bool IsUpdateDownloaded => false;
 		private async void RerunButton_OnClick(object sender, RoutedEventArgs e)
 		{
 			await BobsBuddyInvoker.RerunLastCombatAsync();
+			OnPropertyChanged(nameof(RerunVisibility));
+		}
+
+		private async void OptimizePositioningButton_OnClick(object sender, RoutedEventArgs e)
+		{
+			await BattlegroundsAutomationController.OptimizeAndApplyPositioningAsync();
 			OnPropertyChanged(nameof(RerunVisibility));
 		}
 

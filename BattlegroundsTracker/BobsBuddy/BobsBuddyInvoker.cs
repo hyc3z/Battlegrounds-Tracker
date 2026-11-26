@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using HearthDb.Enums;
+using Hearthstone_Deck_Tracker.Automation;
 using Hearthstone_Deck_Tracker.Controls.Overlay;
 using Hearthstone_Deck_Tracker.Hearthstone;
 using Hearthstone_Deck_Tracker.Utility;
@@ -252,6 +253,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 
 				State = BobsBuddyState.Combat;
+				BattlegroundsAutomationController.OnCombatStart();
 				BobsBuddyDisplay.RefreshRerunVisibility();
 				DebugLog($"{_instanceKey} Waiting for state changes...");
 				await Task.Delay(StateChangeDelay);
@@ -474,7 +476,7 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 				// Clone the opponent captured for this combat (including any hidden info revealed during
 				// combat such as secrets or hand minions) into an independent input for the re-run.
-				var opponentInput = CreateRerunOpponentSnapshot(input.Opponent, rerunInput);
+				var opponentInput = CreateRerunPlayerSnapshot(input.Opponent, rerunInput);
 				rerunInput.Player = playerInput;
 				rerunInput.Opponent = opponentInput;
 
@@ -530,12 +532,75 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 			}
 		}
 
+		internal sealed class RerunContext
+		{
+			public Input SourceCombatInput { get; }
+			public BobsBuddyPlayer BasePlayer { get; }
+			public int[] PlayerEntityIds { get; }
+			public int CombatTurn { get; }
+			public int CurrentTurn { get; }
+
+			public RerunContext(Input sourceCombatInput, BobsBuddyPlayer basePlayer, int[] playerEntityIds, int combatTurn, int currentTurn)
+			{
+				SourceCombatInput = sourceCombatInput;
+				BasePlayer = basePlayer;
+				PlayerEntityIds = playerEntityIds;
+				CombatTurn = combatTurn;
+				CurrentTurn = currentTurn;
+			}
+		}
+
+		internal static RerunContext? TryCreateRerunContext() => _lastCombat?.CreateRerunContext();
+
+		private RerunContext? CreateRerunContext()
+		{
+			var input = _input;
+			if(input == null || _game.IsBattlegroundsDuosMatch || _game.IsBattlegroundsCombatPhase)
+				return null;
+			if(State is not (BobsBuddyState.Shopping or BobsBuddyState.ShoppingAfterPartial))
+				return null;
+
+			var previousErrorState = ErrorState;
+			try
+			{
+				var simulator = new Simulator();
+				var playerInput = new BobsBuddyPlayer(input);
+				SetupInputPlayer(simulator, _game.Player, playerInput, _game.PlayerEntity, true);
+				var entityIds = playerInput.Side.Select(m => m.game_id).ToArray();
+				return new RerunContext(input, playerInput, entityIds, _turn, _game.GetTurnNumber());
+			}
+			catch(Exception e)
+			{
+				DebugLog($"CreateRerunContext failed: {e}");
+				return null;
+			}
+			finally
+			{
+				ErrorState = previousErrorState;
+			}
+		}
+
+		internal static Input BuildReorderedInput(RerunContext context, int[] playerOrder)
+		{
+			var rerunInput = new Input
+			{
+				DamageCap = context.SourceCombatInput.DamageCap,
+				Anomaly = context.SourceCombatInput.Anomaly,
+				isDuos = false
+			};
+			rerunInput.availableRaces = context.SourceCombatInput.availableRaces;
+			rerunInput.SetTurn(context.CurrentTurn);
+			rerunInput.Player = CreateRerunPlayerSnapshot(context.BasePlayer, rerunInput, playerOrder);
+			rerunInput.Opponent = CreateRerunPlayerSnapshot(context.SourceCombatInput.Opponent, rerunInput);
+			return rerunInput;
+		}
+
 		/// <summary>
-		/// Creates an independent copy of the opponent board for re-runs. Minions are cloned into their own
-		/// simulator (which also clones their enchantments); the remaining lists only hold read-only data
-		/// objects that the simulation clones for every fight, so they can be shared.
+		/// Creates an independent copy of a player board for re-runs / positioning optimization.
+		/// Minions are cloned into their own simulator (which also clones their enchantments); the
+		/// remaining lists hold data objects that the simulation clones per fight.
 		/// </summary>
-		private static BobsBuddyPlayer CreateRerunOpponentSnapshot(BobsBuddyPlayer source, Input ownerInput)
+		private static BobsBuddyPlayer CreateRerunPlayerSnapshot(BobsBuddyPlayer source, Input ownerInput, int[]? sideOrder = null)
 		{
 			var snapshot = new BobsBuddyPlayer(ownerInput);
 			foreach(var property in typeof(BobsBuddyPlayer).GetProperties(BindingFlags.Public | BindingFlags.Instance))
@@ -551,8 +616,16 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 				snapshot.SetHeroIsKelThuzad();
 
 			var simulator = new Simulator();
-			foreach(var minion in source.Side)
-				snapshot.Side.Add(minion.Clone(simulator));
+			if(sideOrder != null)
+			{
+				foreach(var idx in sideOrder)
+					snapshot.Side.Add(source.Side[idx].Clone(simulator));
+			}
+			else
+			{
+				foreach(var minion in source.Side)
+					snapshot.Side.Add(minion.Clone(simulator));
+			}
 
 			snapshot.Hand.AddRange(source.Hand);
 			snapshot.HeroPowers.AddRange(source.HeroPowers);
