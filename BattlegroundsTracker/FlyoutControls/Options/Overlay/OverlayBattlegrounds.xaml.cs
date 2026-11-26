@@ -100,6 +100,16 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			CheckboxBgsAutoPositioningApply.IsChecked = Config.Instance.BgsAutoPositioningApply;
 			CheckboxBgsSaveMatchReviews.IsChecked = Config.Instance.BgsSaveMatchReviews;
 
+			// Migrate untouched legacy OpenAI defaults to DeepSeek Flash when no API key was configured.
+			if(string.IsNullOrWhiteSpace(Config.Instance.BgsLlmApiKey)
+				&& Config.Instance.BgsLlmBaseUrl == "https://api.openai.com/v1"
+				&& Config.Instance.BgsLlmModel == "gpt-4o-mini")
+			{
+				Config.Instance.BgsLlmBaseUrl = "https://api.deepseek.com/v1";
+				Config.Instance.BgsLlmModel = "deepseek-flash";
+				Config.Save();
+			}
+
 			TextBoxLlmBaseUrl.Text = Config.Instance.BgsLlmBaseUrl;
 			PasswordBoxLlmApiKey.Password = Config.Instance.BgsLlmApiKey;
 			TextBoxLlmModel.Text = Config.Instance.BgsLlmModel;

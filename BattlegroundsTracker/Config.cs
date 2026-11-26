@@ -926,14 +926,14 @@ namespace Hearthstone_Deck_Tracker
 		[DefaultValue(true)]
 		public bool ShowBgsAutomationLogOverlay = true;
 
-		[DefaultValue("https://api.openai.com/v1")]
-		public string BgsLlmBaseUrl = "https://api.openai.com/v1";
+		[DefaultValue("https://api.deepseek.com/v1")]
+		public string BgsLlmBaseUrl = "https://api.deepseek.com/v1";
 
 		[DefaultValue("")]
 		public string BgsLlmApiKey = "";
 
-		[DefaultValue("gpt-4o-mini")]
-		public string BgsLlmModel = "gpt-4o-mini";
+		[DefaultValue("deepseek-flash")]
+		public string BgsLlmModel = "deepseek-flash";
 
 		[DefaultValue(false)]
 		public bool BgsLlmAutoAdviseOnTurnStart = false;

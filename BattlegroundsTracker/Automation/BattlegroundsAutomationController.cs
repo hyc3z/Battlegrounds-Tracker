@@ -269,7 +269,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 			{
 				if(UiLog != null)
 					UiLog.IsExpanded = true;
-				var modelName = string.IsNullOrWhiteSpace(Config.Instance.BgsLlmModel) ? "gpt-4o-mini" : Config.Instance.BgsLlmModel.Trim();
+				var modelName = string.IsNullOrWhiteSpace(Config.Instance.BgsLlmModel) ? "deepseek-flash" : Config.Instance.BgsLlmModel.Trim();
 				SetStatus("AI 思考中...", AutomationLogLevel.Busy, isBusy: true);
 				EmitLog($"正在调用 {modelName} 分析当前局势与操作...", AutomationLogLevel.Busy);
 

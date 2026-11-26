@@ -54,7 +54,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 		{
 			var trimmed = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
 			if(string.IsNullOrEmpty(trimmed))
-				return "https://api.openai.com/v1/chat/completions";
+				return "https://api.deepseek.com/v1/chat/completions";
 			if(trimmed.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
 				return trimmed;
 			if(trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
@@ -93,7 +93,7 @@ namespace Hearthstone_Deck_Tracker.Automation
 		{
 			var sw = Stopwatch.StartNew();
 			var endpoint = ResolveCompletionsEndpoint(baseUrl);
-			var resolvedModel = string.IsNullOrWhiteSpace(model) ? "gpt-4o-mini" : model.Trim();
+			var resolvedModel = string.IsNullOrWhiteSpace(model) ? "deepseek-flash" : model.Trim();
 
 			if(string.IsNullOrWhiteSpace(apiKey) && !endpoint.Contains("localhost") && !endpoint.Contains("127.0.0.1"))
 				return new LlmAdviceResponse(false, "未配置 API Key，请先在「设置 → 酒馆战棋 → AI 教练 (LLM)」填写。", 0);
