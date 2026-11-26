@@ -112,6 +112,30 @@ namespace Hearthstone_Deck_Tracker.BobsBuddy
 
 		internal static Task RerunLastCombatAsync() => _lastCombat?.RerunAsync() ?? Task.CompletedTask;
 
+		internal static string? GetLastCombatSummary()
+		{
+			var last = _lastCombat;
+			var input = last?._input;
+			if(last == null || input == null)
+				return null;
+
+			var oppMinions = input.Opponent.Side.Select(m =>
+			{
+				var card = Database.GetCardFromId(m.CardID);
+				var name = card?.LocalizedName ?? m.CardID;
+				return $"{(m.golden ? "★金 " : "")}{name} {m.baseAttack}/{m.baseHealth}";
+			}).ToList();
+
+			var summary = $"第 {last._turn} 回合对手阵容（{oppMinions.Count} 怪）："
+				+ (oppMinions.Count > 0 ? string.Join("、", oppMinions) : "空场");
+
+			if(last.Output != null)
+			{
+				summary += $"\nBob's Buddy 模拟胜率：胜 {last.Output.winRate * 100:0.#}% / 平 {last.Output.tieRate * 100:0.#}% / 负 {last.Output.lossRate * 100:0.#}%";
+			}
+			return summary;
+		}
+
 		private BobsBuddyPlayer DuosInputPlayer = new BobsBuddyPlayer(null);
 		private BobsBuddyPlayer DuosInputOpponent = new BobsBuddyPlayer(null);
 		private BobsBuddyPlayer? DuosInputPlayerTeammate;

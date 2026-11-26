@@ -19,8 +19,10 @@ namespace Hearthstone_Deck_Tracker.Automation
 	{
 		private static readonly object Sync = new();
 		private static CancellationTokenSource? _activeCts;
+		private static CancellationTokenSource? _adviceCts;
 		private static int _lastTurn2UpgradeAttemptedGameHash;
 		private static bool _isBusy;
+		private static bool _isAdvising;
 
 		private static AutomationLogViewModel? UiLog => Core.Overlay?.AutomationLogVM;
 
@@ -53,10 +55,13 @@ namespace Hearthstone_Deck_Tracker.Automation
 		internal static void CancelActive(string reason)
 		{
 			CancellationTokenSource? toCancel;
+			CancellationTokenSource? adviceToCancel;
 			lock(Sync)
 			{
 				toCancel = _activeCts;
 				_activeCts = null;
+				adviceToCancel = _adviceCts;
+				_adviceCts = null;
 			}
 			if(toCancel != null)
 			{
@@ -65,6 +70,16 @@ namespace Hearthstone_Deck_Tracker.Automation
 				try
 				{
 					toCancel.Cancel();
+				}
+				catch
+				{
+				}
+			}
+			if(adviceToCancel != null)
+			{
+				try
+				{
+					adviceToCancel.Cancel();
 				}
 				catch
 				{
@@ -91,6 +106,9 @@ namespace Hearthstone_Deck_Tracker.Automation
 				else
 					EmitLog("T2 自动升本未开启（可在设置中启用）");
 			}
+
+			if(Config.Instance.BgsLlmAutoAdviseOnTurnStart)
+				_ = RequestLlmAdviceDelayedAsync(game, delayMs: 1600);
 		}
 
 		internal static void OnCombatStart()
@@ -102,7 +120,90 @@ namespace Hearthstone_Deck_Tracker.Automation
 		internal static void OnGameEnd()
 		{
 			CancelActive("对局结束");
+			BattlegroundsActionHistory.Reset();
 			SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
+		}
+
+		private static async Task RequestLlmAdviceDelayedAsync(GameV2 game, int delayMs)
+		{
+			try
+			{
+				await Task.Delay(delayMs);
+				if(!game.IsBattlegroundsMatch || game.IsBattlegroundsCombatPhase)
+					return;
+				await RequestLlmAdviceAsync();
+			}
+			catch
+			{
+			}
+		}
+
+		internal static async Task RequestLlmAdviceAsync()
+		{
+			var game = Core.Game;
+			if(!game.IsBattlegroundsMatch)
+			{
+				EmitLog("仅在酒馆战棋对局中支持 AI 分析", AutomationLogLevel.Warning);
+				return;
+			}
+
+			CancellationToken ct;
+			lock(Sync)
+			{
+				if(_isAdvising)
+				{
+					EmitLog("AI 正在分析中，请稍候...", AutomationLogLevel.Warning);
+					return;
+				}
+				_isAdvising = true;
+				_adviceCts?.Dispose();
+				_adviceCts = new CancellationTokenSource();
+				ct = _adviceCts.Token;
+			}
+
+			try
+			{
+				if(UiLog != null)
+					UiLog.IsExpanded = true;
+				var modelName = string.IsNullOrWhiteSpace(Config.Instance.BgsLlmModel) ? "gpt-4o-mini" : Config.Instance.BgsLlmModel.Trim();
+				SetStatus("AI 思考中...", AutomationLogLevel.Busy, isBusy: true);
+				EmitLog($"正在调用 {modelName} 分析当前局势与操作...", AutomationLogLevel.Busy);
+
+				var statePrompt = BattlegroundsStateSerializer.BuildPromptContext(game);
+				Log.Info($"[Automation/LLM] Prompt:\n{statePrompt}");
+
+				var response = await LlmAdvisorClient.RequestAdviceAsync(statePrompt, ct);
+				if(response.Success)
+				{
+					EmitLog($"AI 建议（耗时 {response.ElapsedMs / 1000.0:0.1}s）：\n{response.Content}", AutomationLogLevel.Advice);
+					SetStatus($"AI 建议就绪 ({response.ElapsedMs / 1000.0:0.1}s)", AutomationLogLevel.Success, isBusy: false);
+				}
+				else
+				{
+					EmitLog(response.Content, AutomationLogLevel.Error);
+					SetStatus("AI 调用失败", AutomationLogLevel.Error, isBusy: false);
+				}
+			}
+			catch(OperationCanceledException)
+			{
+				EmitLog("AI 分析已取消", AutomationLogLevel.Warning);
+				SetStatus("待机", AutomationLogLevel.Info, isBusy: false);
+			}
+			catch(Exception ex)
+			{
+				EmitLog($"AI 分析异常：{ex.Message}", AutomationLogLevel.Error);
+				Log.Error(ex);
+				SetStatus("AI 调用异常", AutomationLogLevel.Error, isBusy: false);
+			}
+			finally
+			{
+				lock(Sync)
+				{
+					_isAdvising = false;
+					_adviceCts?.Dispose();
+					_adviceCts = null;
+				}
+			}
 		}
 
 		private static async Task TryAutoUpgradeTurn2Async(GameV2 game)

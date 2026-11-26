@@ -25,7 +25,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Border Width="290"
+    <Border Width="350"
             Background="#E6141617"
             BorderBrush="#3F4346"
             BorderThickness="1,0,1,1"
@@ -59,6 +59,15 @@
                         <Run Text="自动: " Foreground="#9AA3AB" /><Run Text="{Binding StatusText, Mode=OneWay}" FontWeight="SemiBold" />
                     </TextBlock>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Style="{StaticResource HeaderActionButtonStyle}"
+                                Background="#1D3A4F"
+                                Margin="4,0,0,0"
+                                extensions:OverlayExtensions.IsOverlayHitTestVisible="True">
+                            <Border.InputBindings>
+                                <MouseBinding MouseAction="LeftClick" Command="{Binding AskAiCommand}" />
+                            </Border.InputBindings>
+                            <TextBlock Text="AI建议" Foreground="#7CC6FE" FontSize="11" FontWeight="SemiBold" />
+                        </Border>
                         <Border Style="{StaticResource HeaderActionButtonStyle}"
                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
                                 Background="#511615"
@@ -94,7 +103,7 @@
                     BorderThickness="0,1,0,0"
                     Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                 <ScrollViewer x:Name="LogScrollViewer"
-                              MaxHeight="155"
+                              MaxHeight="240"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="6,4">

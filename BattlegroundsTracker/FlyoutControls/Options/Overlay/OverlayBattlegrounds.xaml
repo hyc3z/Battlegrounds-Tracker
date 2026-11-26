@@ -138,6 +138,32 @@
                           Unchecked="CheckboxBgsAutoPositioningApply_Unchecked" Margin="0,5,0,0" />
             </StackPanel>
         </GroupBox>
+        <GroupBox Header="AI 教练 (OpenAI 兼容接口)" Margin="5,10,5,5">
+            <StackPanel>
+                <DockPanel Margin="0,2">
+                    <TextBlock Text="API 地址" Width="76" VerticalAlignment="Center" DockPanel.Dock="Left" />
+                    <TextBox x:Name="TextBoxLlmBaseUrl" LostFocus="TextBoxLlmSettings_LostFocus" />
+                </DockPanel>
+                <DockPanel Margin="0,5,0,2">
+                    <TextBlock Text="API Key" Width="76" VerticalAlignment="Center" DockPanel.Dock="Left" />
+                    <PasswordBox x:Name="PasswordBoxLlmApiKey" LostFocus="PasswordBoxLlmApiKey_LostFocus" />
+                </DockPanel>
+                <DockPanel Margin="0,5,0,2">
+                    <TextBlock Text="模型名称" Width="76" VerticalAlignment="Center" DockPanel.Dock="Left" />
+                    <TextBox x:Name="TextBoxLlmModel" LostFocus="TextBoxLlmSettings_LostFocus" />
+                </DockPanel>
+                <TextBlock Text="兼容 OpenAI / DeepSeek / 硅基流动 / 通义千问 / Kimi / 本地 Ollama (http://localhost:11434/v1) 等接口。"
+                           Foreground="Gray" TextWrapping="Wrap" Margin="0,4,0,4" />
+                <CheckBox x:Name="CheckboxBgsLlmAutoAdvise" Content="每回合购物开始时自动给出 AI 建议"
+                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                          Checked="CheckboxBgsLlmAutoAdvise_Checked"
+                          Unchecked="CheckboxBgsLlmAutoAdvise_Unchecked" Margin="0,2,0,6" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnTestLlmConnection" Content="测试连接" Width="110" Click="BtnTestLlmConnection_Click" />
+                    <TextBlock x:Name="TextBlockLlmTestResult" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="Gray" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
         <GroupBox Header="对局战绩" Margin="5,10,5,5">
             <StackPanel>
                 <CheckBox

@@ -3,9 +3,11 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 using Hearthstone_Deck_Tracker.Annotations;
+using Hearthstone_Deck_Tracker.Automation;
 using Hearthstone_Deck_Tracker.Commands;
 using Hearthstone_Deck_Tracker.HsReplay;
 using Hearthstone_Deck_Tracker.Utility;
@@ -95,6 +97,11 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			CheckboxShowBgsAutomationLogOverlay.IsChecked = Config.Instance.ShowBgsAutomationLogOverlay;
 			CheckboxBgsAutoUpgradeTurn2.IsChecked = Config.Instance.BgsAutoUpgradeTurn2;
 			CheckboxBgsAutoPositioningApply.IsChecked = Config.Instance.BgsAutoPositioningApply;
+
+			TextBoxLlmBaseUrl.Text = Config.Instance.BgsLlmBaseUrl;
+			PasswordBoxLlmApiKey.Password = Config.Instance.BgsLlmApiKey;
+			TextBoxLlmModel.Text = Config.Instance.BgsLlmModel;
+			CheckboxBgsLlmAutoAdvise.IsChecked = Config.Instance.BgsLlmAutoAdviseOnTurnStart;
 
 			CheckboxShowSessionRecap.IsChecked = Config.Instance.ShowSessionRecap;
 			CheckboxShowMinionsAvailable.IsChecked = Config.Instance.ShowSessionRecapMinionsAvailable;
@@ -224,6 +231,65 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 				return;
 			Config.Instance.BgsAutoPositioningApply = false;
 			SaveConfig(false);
+		}
+
+		private void TextBoxLlmSettings_LostFocus(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsLlmBaseUrl = TextBoxLlmBaseUrl.Text.Trim();
+			Config.Instance.BgsLlmModel = TextBoxLlmModel.Text.Trim();
+			SaveConfig(false);
+		}
+
+		private void PasswordBoxLlmApiKey_LostFocus(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsLlmApiKey = PasswordBoxLlmApiKey.Password.Trim();
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsLlmAutoAdvise_Checked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsLlmAutoAdviseOnTurnStart = true;
+			SaveConfig(false);
+		}
+
+		private void CheckboxBgsLlmAutoAdvise_Unchecked(object sender, RoutedEventArgs e)
+		{
+			if(!_initialized)
+				return;
+			Config.Instance.BgsLlmAutoAdviseOnTurnStart = false;
+			SaveConfig(false);
+		}
+
+		private async void BtnTestLlmConnection_Click(object sender, RoutedEventArgs e)
+		{
+			Config.Instance.BgsLlmBaseUrl = TextBoxLlmBaseUrl.Text.Trim();
+			Config.Instance.BgsLlmApiKey = PasswordBoxLlmApiKey.Password.Trim();
+			Config.Instance.BgsLlmModel = TextBoxLlmModel.Text.Trim();
+			SaveConfig(false);
+
+			BtnTestLlmConnection.IsEnabled = false;
+			TextBlockLlmTestResult.Text = "正在测试连接...";
+			try
+			{
+				var result = await LlmAdvisorClient.TestConnectionAsync(
+					Config.Instance.BgsLlmBaseUrl,
+					Config.Instance.BgsLlmApiKey,
+					Config.Instance.BgsLlmModel,
+					CancellationToken.None);
+				TextBlockLlmTestResult.Text = result.Success
+					? $"连接成功 ({result.ElapsedMs / 1000.0:0.1}s)：{result.Content}"
+					: result.Content;
+			}
+			finally
+			{
+				BtnTestLlmConnection.IsEnabled = true;
+			}
 		}
 
 		private void CheckboxShowOverlayInBackground_Checked(object sender, RoutedEventArgs e)

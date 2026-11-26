@@ -15,7 +15,8 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation
 		Busy,
 		Success,
 		Warning,
-		Error
+		Error,
+		Advice
 	}
 
 	public sealed class AutomationLogEntry
@@ -25,6 +26,7 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation
 		private static readonly Brush SuccessBrush = CreateFrozenBrush(0x8A, 0xC6, 0x6E);
 		private static readonly Brush WarningBrush = CreateFrozenBrush(0xE5, 0xC0, 0x7B);
 		private static readonly Brush ErrorBrush = CreateFrozenBrush(0xE0, 0x6C, 0x75);
+		private static readonly Brush AdviceBrush = CreateFrozenBrush(0x7C, 0xC6, 0xFE);
 
 		public string Timestamp { get; }
 		public string Message { get; }
@@ -36,6 +38,7 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation
 			AutomationLogLevel.Success => SuccessBrush,
 			AutomationLogLevel.Warning => WarningBrush,
 			AutomationLogLevel.Error => ErrorBrush,
+			AutomationLogLevel.Advice => AdviceBrush,
 			_ => InfoBrush
 		};
 
@@ -116,6 +119,8 @@ namespace Hearthstone_Deck_Tracker.Controls.Overlay.Battlegrounds.Automation
 		public ICommand ClearCommand => new Command(() => RunOnUiThread(() => Entries.Clear()));
 
 		public ICommand StopCommand => new Command(() => BattlegroundsAutomationController.CancelActive("用户点击停止按钮"));
+
+		public ICommand AskAiCommand => new Command(() => _ = BattlegroundsAutomationController.RequestLlmAdviceAsync());
 
 		public void SetStatus(string status, AutomationLogLevel level = AutomationLogLevel.Info, bool isBusy = false)
 		{

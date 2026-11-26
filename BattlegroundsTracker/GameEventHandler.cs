@@ -639,6 +639,7 @@ namespace Hearthstone_Deck_Tracker
 		private DateTime _lastGameStartTimestamp = DateTime.MinValue;
 		public void HandleGameStart(DateTime timestamp)
 		{
+			BattlegroundsActionHistory.Reset();
 			_game.InvalidateMatchInfoCache();
 			if(_game.CurrentGameMode == Practice && !_game.IsInMenu && !_handledGameEnd
 				&& _lastGameStartTimestamp > DateTime.MinValue && timestamp > _lastGameStartTimestamp)
@@ -1334,6 +1335,12 @@ namespace Hearthstone_Deck_Tracker
 		public void HandlePlayerHeroPower(string cardId, int turn)
 		{
 			LogEvent("PlayerHeroPower", cardId, turn);
+			if(_game.IsBattlegroundsMatch && !_game.IsBattlegroundsCombatPhase)
+			{
+				var hpCard = Database.GetCardFromId(cardId);
+				if(hpCard != null)
+					BattlegroundsActionHistory.Record(_game.GetTurnNumber(), $"使用英雄技能 [{hpCard.LocalizedName ?? cardId}]");
+			}
 			_game.SecretsManager.HandleHeroPower();
 			GameEvents.OnPlayerHeroPower.Execute();
 		}
@@ -2404,7 +2411,11 @@ namespace Hearthstone_Deck_Tracker
 			Core.UpdatePlayerCards();
 			var card = Database.GetCardFromId(cardId);
 			if(card != null)
+			{
+				if(_game.IsBattlegroundsMatch && !_game.IsBattlegroundsCombatPhase && !cardId.StartsWith("TB_BaconShop", StringComparison.Ordinal))
+					BattlegroundsActionHistory.Record(_game.GetTurnNumber(), $"入手/购入 [{card.LocalizedName ?? cardId}]");
 				GameEvents.OnPlayerGet.Execute(card);
+			}
 		}
 
 		public void HandlePlayerBackToHand(Entity entity, string cardId, int turn)
@@ -2548,7 +2559,11 @@ namespace Hearthstone_Deck_Tracker
 			Core.UpdatePlayerCards();
 			var card = Database.GetCardFromId(cardId);
 			if(card != null)
+			{
+				if(_game.IsBattlegroundsMatch && !_game.IsBattlegroundsCombatPhase && !cardId.StartsWith("TB_BaconShop_Drag", StringComparison.Ordinal))
+					BattlegroundsActionHistory.Record(_game.GetTurnNumber(), $"打出 [{card.LocalizedName ?? cardId}]");
 				GameEvents.OnPlayerPlay.Execute(card);
+			}
 			_game.SecretsManager.HandleCardPlayed(entity, parentBlockCardId);
 		}
 
@@ -2596,6 +2611,8 @@ namespace Hearthstone_Deck_Tracker
 		{
 			if(_game.IsBattlegroundsMatch)
 			{
+				if(value > 1 && _game.Entities.TryGetValue(id, out var ent) && ent.IsControlledBy(_game.Player.Id))
+					BattlegroundsActionHistory.Record(_game.GetTurnNumber(), $"升本至 {value} 本");
 				_game.UpdateBattlegroundsPlayerTechLevel(id, value);
 			}
 		}
@@ -2660,6 +2677,8 @@ namespace Hearthstone_Deck_Tracker
 
 			_game.Player.PlayToGraveyard(entity, turn);
 			var card = Database.GetCardFromId(entity.Info.LatestCardId);
+			if(_game.IsBattlegroundsMatch && !_game.IsBattlegroundsCombatPhase && entity.IsMinion && card != null)
+				BattlegroundsActionHistory.Record(_game.GetTurnNumber(), $"出售/移除 [{card.LocalizedName ?? entity.CardId}]");
 			if(card != null)
 				GameEvents.OnPlayerPlayToGraveyard.Execute(card);
 
