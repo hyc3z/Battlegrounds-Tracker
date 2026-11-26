@@ -120,7 +120,7 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			var enabled = true;
 			if(Remote.Config.Data?.BobsBuddy?.Disabled ?? false)
 			{
-				TextBobsBuddyDisabled.Text = "Temporarily Disabled";
+				TextBobsBuddyDisabled.Text = "暂时不可用";
 				enabled = false;
 			}
 			else
@@ -128,7 +128,7 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 				var verStr = Remote.Config.Data?.BobsBuddy?.MinRequiredVersion;
 				if(Version.TryParse(verStr, out var requiredVersion) && requiredVersion > Helper.GetCurrentVersion())
 				{
-					TextBobsBuddyDisabled.Text = $"Requires HDT v{requiredVersion}";
+					TextBobsBuddyDisabled.Text = $"需要 v{requiredVersion} 或更高版本";
 					enabled = false;
 				}
 			}
@@ -753,10 +753,10 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			if(this.ParentMainWindow() is not { } window)
 				return;
 			var result = await window.ShowMessageAsync(
-				LocUtil.Get("Options_Overlay_Battlegrounds_Dialog_ResetSession_Title"),
-				LocUtil.Get("Options_Overlay_Battlegrounds_Dialog_ResetSession_Desc"),
+				"重置本时段战绩",
+				"确定要清空本时段的对局战绩并重置起始分数吗？",
 				MessageDialogStyle.AffirmativeAndNegative,
-				new MessageDialogs.Settings { AffirmativeButtonText = LocUtil.Get("Options_Overlay_Battlegrounds_Dialog_Confirmation_Reset") }
+				new MessageDialogs.Settings { AffirmativeButtonText = "重置", NegativeButtonText = "取消" }
 			);
 			if(result != MessageDialogResult.Affirmative)
 				return;
@@ -769,7 +769,7 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 		{
 			if(User32.GetHearthstoneWindow() == IntPtr.Zero)
 				return;
-			BtnUnlockOverlay.Content = await Core.Overlay.UnlockUi(true) ? "Lock" : "Unlock";
+			BtnUnlockOverlay.Content = await Core.Overlay.UnlockUi(true) ? "锁定" : "解锁";
 		}
 
 		private async void BtnResetOverlay_Click(object sender, RoutedEventArgs e)
@@ -777,16 +777,17 @@ namespace Hearthstone_Deck_Tracker.FlyoutControls.Options.Overlay
 			if(this.ParentMainWindow() is not { } window)
 				return;
 			var result = await window.ShowMessageAsync(
-				LocUtil.Get("Options_Overlay_Battlegrounds_Dialog_ResetPos_Title"),
-				LocUtil.Get("Options_Overlay_Battlegrounds_Dialog_ResetPos_Desc"),
-				MessageDialogStyle.AffirmativeAndNegative);
+				"重置面板位置",
+				"确定要将对局战绩面板的位置重置为默认吗？",
+				MessageDialogStyle.AffirmativeAndNegative,
+				new MessageDialogs.Settings { AffirmativeButtonText = "重置", NegativeButtonText = "取消" });
 			if(result != MessageDialogResult.Affirmative)
 				return;
 
-			if((string)BtnUnlockOverlay.Content == "Lock")
+			if((string)BtnUnlockOverlay.Content == "锁定")
 			{
 				await Core.Overlay.UnlockUi(true);
-				BtnUnlockOverlay.Content = "Unlock";
+				BtnUnlockOverlay.Content = "解锁";
 			}
 
 			Config.Instance.Reset(nameof(Config.SessionRecapTop));

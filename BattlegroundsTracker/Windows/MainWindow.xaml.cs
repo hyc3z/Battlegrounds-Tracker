@@ -79,19 +79,19 @@ namespace Hearthstone_Deck_Tracker.Windows
 			var game = Core.Game;
 			string status;
 			if(!game.IsRunning)
-				status = Helper.HearthstoneDirExists ? "Hearthstone is not running." : "Hearthstone installation could not be found.";
-			else if(game.IsBattlegroundsMatch)
-				status = "Battlegrounds match in progress";
+				status = Helper.HearthstoneDirExists ? "炉石传说未运行。" : "未找到炉石传说安装目录。";
 			else if(game.IsBattlegroundsDuosMatch)
-				status = "Battlegrounds Duos match in progress";
+				status = "酒馆战棋双打对局进行中";
+			else if(game.IsBattlegroundsMatch)
+				status = "酒馆战棋对局进行中";
 			else
-				status = $"In game (mode: {game.CurrentMode})";
+				status = $"游戏中（模式：{game.CurrentMode}）";
 
 			TextBlockStatus.Text = status;
 			TextBlockHearthstoneStatus.Text = Helper.HearthstoneDirExists
-				? "Hearthstone installation found."
-				: "Hearthstone installation could not be found.";
-			TextBlockHearthMirrorStatus.Text = game.IsRunning ? "Connected to Hearthstone" : "";
+				? "已找到炉石传说安装目录。"
+				: "未找到炉石传说安装目录。";
+			TextBlockHearthMirrorStatus.Text = game.IsRunning ? "已连接到炉石传说" : "";
 			BtnStartHearthstone.IsEnabled = !game.IsRunning;
 		}
 
@@ -226,14 +226,14 @@ namespace Hearthstone_Deck_Tracker.Windows
 			if(account == null)
 			{
 				TextBlockAccountStatus.Text = HSReplayNetOAuth.IsFullyAuthenticated
-					? "Logged in, but the account data could not be loaded yet."
-					: "Not logged in.";
+					? "已登录，但账号数据尚未加载。"
+					: "未登录。";
 				BtnLogin.IsEnabled = true;
 				BtnLogout.IsEnabled = HSReplayNetOAuth.IsAuthenticatedForAnything();
 				return;
 			}
 
-			TextBlockAccountStatus.Text = $"Logged in as {account.Username}{(account.IsTier7 ? " (Tier7)" : "")}.";
+			TextBlockAccountStatus.Text = $"已登录：{account.Username}{(account.IsTier7 ? " (Tier7)" : "")}";
 			BtnLogin.IsEnabled = false;
 			BtnLogout.IsEnabled = true;
 		}
@@ -245,7 +245,7 @@ namespace Hearthstone_Deck_Tracker.Windows
 			{
 				var error = await HSReplayNetOAuth.Authenticate();
 				if(error != AuthenticationErrorType.None)
-					await this.ShowMessageAsync("HSReplay.net login failed", error.ToString());
+					await this.ShowMessageAsync("HSReplay.net 登录失败", error.ToString());
 			}
 			finally
 			{

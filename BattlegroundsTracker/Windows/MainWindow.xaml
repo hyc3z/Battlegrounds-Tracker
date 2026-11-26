@@ -26,58 +26,58 @@
         <Border Grid.Row="0" Background="{DynamicResource AccentColorBrush}" CornerRadius="3" Padding="12,8">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="BtnSession" Content="Session Results" Padding="10,4" Margin="4,0" Click="BtnSession_OnClick"/>
+                    <Button x:Name="BtnSession" Content="对局战绩" Padding="10,4" Margin="4,0" Click="BtnSession_OnClick"/>
                     <Button x:Name="BtnDiscord" Content="Discord" Padding="10,4" Margin="4,0" Click="BtnDiscord_OnClick"/>
                 </StackPanel>
                 <StackPanel>
                     <TextBlock Text="Battlegrounds Tracker" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
-                    <TextBlock x:Name="TextBlockStatus" Text="Waiting for Hearthstone..." FontSize="12" Foreground="White" Opacity="0.85" Margin="0,3,0,0"/>
+                    <TextBlock x:Name="TextBlockStatus" Text="等待炉石传说启动..." FontSize="12" Foreground="White" Opacity="0.85" Margin="0,3,0,0"/>
                 </StackPanel>
             </DockPanel>
         </Border>
 
         <!-- Main content -->
         <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="0,8,0,0">
-            <TabItem Header="General">
+            <TabItem Header="常规">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="10">
-                        <TextBlock Text="Overlay" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <TextBlock Text="覆盖层" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
                         <StackPanel Orientation="Horizontal" Margin="0,4">
-                            <TextBlock Text="Opacity" Width="140" VerticalAlignment="Center"/>
+                            <TextBlock Text="不透明度" Width="140" VerticalAlignment="Center"/>
                             <Slider x:Name="SliderOverlayOpacity" Minimum="10" Maximum="100" Width="280" VerticalAlignment="Center"
                                     ValueChanged="SliderOverlayOpacity_OnValueChanged"/>
                             <TextBlock x:Name="LblOverlayOpacity" Width="50" VerticalAlignment="Center" TextAlignment="Right"/>
                         </StackPanel>
-                        <CheckBox x:Name="CheckboxHideOverlay" Content="Hide overlay" Margin="0,8,0,0" Click="CheckboxHideOverlay_OnClick"/>
-                        <CheckBox x:Name="CheckboxHideInMenu" Content="Hide overlay in menu" Margin="0,4,0,0" Click="CheckboxHideInMenu_OnClick"/>
-                        <CheckBox x:Name="CheckboxHideInBackground" Content="Hide overlay while Hearthstone is in the background" Margin="0,4,0,0" Click="CheckboxHideInBackground_OnClick"/>
-                        <CheckBox x:Name="CheckboxUseAnimations" Content="Enable animations" Margin="0,4,0,0" Click="CheckboxUseAnimations_OnClick"/>
+                        <CheckBox x:Name="CheckboxHideOverlay" Content="隐藏覆盖层" Margin="0,8,0,0" Click="CheckboxHideOverlay_OnClick"/>
+                        <CheckBox x:Name="CheckboxHideInMenu" Content="在主菜单中隐藏覆盖层" Margin="0,4,0,0" Click="CheckboxHideInMenu_OnClick"/>
+                        <CheckBox x:Name="CheckboxHideInBackground" Content="炉石处于后台时隐藏覆盖层" Margin="0,4,0,0" Click="CheckboxHideInBackground_OnClick"/>
+                        <CheckBox x:Name="CheckboxUseAnimations" Content="启用动画效果" Margin="0,4,0,0" Click="CheckboxUseAnimations_OnClick"/>
 
-                        <TextBlock Text="Windows" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,6"/>
-                        <CheckBox x:Name="CheckboxShowBattlegroundsSessionOnStart" Content="Show session recap window on start" Margin="0,4,0,0" Click="CheckboxShowSessionOnStart_OnClick"/>
-                        <CheckBox x:Name="CheckboxShowBattlegroundsMechanicWindow" Content="Show Battlegrounds mechanic window" Margin="0,4,0,0" Click="CheckboxShowMechanicWindow_OnClick"/>
+                        <TextBlock Text="窗口" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,6"/>
+                        <CheckBox x:Name="CheckboxShowBattlegroundsSessionOnStart" Content="启动时显示对局战绩窗口" Margin="0,4,0,0" Click="CheckboxShowSessionOnStart_OnClick"/>
+                        <CheckBox x:Name="CheckboxShowBattlegroundsMechanicWindow" Content="显示酒馆战棋机制窗口" Margin="0,4,0,0" Click="CheckboxShowMechanicWindow_OnClick"/>
 
-                        <TextBlock Text="Hearthstone" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,6"/>
+                        <TextBlock Text="炉石传说" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,6"/>
                         <TextBlock x:Name="TextBlockHearthstoneStatus" TextWrapping="Wrap" Margin="0,4"/>
-                        <Button x:Name="BtnStartHearthstone" Content="Start Hearthstone" Width="150" HorizontalAlignment="Left" Margin="0,6" Click="BtnStartHearthstone_OnClick"/>
+                        <Button x:Name="BtnStartHearthstone" Content="启动炉石传说" Width="150" HorizontalAlignment="Left" Margin="0,6" Click="BtnStartHearthstone_OnClick"/>
 
-                        <TextBlock Text="HSReplay.net account" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,6"/>
-                        <TextBlock x:Name="TextBlockAccountStatus" Text="Not logged in." TextWrapping="Wrap" Margin="0,4"/>
+                        <TextBlock Text="HSReplay.net 账号" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,6"/>
+                        <TextBlock x:Name="TextBlockAccountStatus" Text="未登录。" TextWrapping="Wrap" Margin="0,4"/>
                         <StackPanel Orientation="Horizontal" Margin="0,4">
-                            <Button x:Name="BtnLogin" Content="Log in" Width="110" Margin="0,0,8,0" Click="BtnLogin_OnClick"/>
-                            <Button x:Name="BtnLogout" Content="Log out" Width="110" Click="BtnLogout_OnClick"/>
+                            <Button x:Name="BtnLogin" Content="登录" Width="110" Margin="0,0,8,0" Click="BtnLogin_OnClick"/>
+                            <Button x:Name="BtnLogout" Content="退出登录" Width="110" Click="BtnLogout_OnClick"/>
                         </StackPanel>
-                        <TextBlock Text="An HSReplay.net account is only required for the Tier7 Battlegrounds features (hero, quest and trinket pick statistics). The tracker itself works without it."
+                        <TextBlock Text="仅在使用 Tier7 酒馆战棋统计功能（英雄、任务、饰品选牌胜率）时需要 HSReplay.net 账号，其他追踪与战斗模拟功能无需登录。"
                                    TextWrapping="Wrap" Foreground="Gray" Margin="0,6,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-            <TabItem Header="Battlegrounds">
+            <TabItem Header="酒馆战棋">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <options:OverlayBattlegrounds x:Name="OptionsBattlegrounds"/>
                 </ScrollViewer>
             </TabItem>
-            <TabItem Header="Errors">
+            <TabItem Header="错误日志">
                 <error:ErrorList/>
             </TabItem>
         </TabControl>

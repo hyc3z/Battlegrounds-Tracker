@@ -13,108 +13,108 @@
              d:DesignHeight="600" d:DesignWidth="300">
     <StackPanel>
         <CheckBox x:Name="CheckboxShowOverlayInBackground"
-                  Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowInBackground}" HorizontalAlignment="Left"
+                  Content="炉石处于后台时保持显示覆盖层" HorizontalAlignment="Left"
                   Margin="10,5,0,0" VerticalAlignment="Top"
                   Checked="CheckboxShowOverlayInBackground_Checked"
                   Unchecked="CheckboxShowOverlayInBackground_Unchecked" />
         <CheckBox x:Name="CheckboxShowMenuOverlayInBackground"
-                  Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowMenuOverlayInBackground}" HorizontalAlignment="Left"
+                  Content="炉石处于后台时保持显示菜单覆盖层" HorizontalAlignment="Left"
                   Margin="10,5,0,0" VerticalAlignment="Top"
                   Checked="CheckboxShowMenuOverlayInBackground_Checked"
                   Unchecked="CheckboxShowMenuOverlayInBackground_Unchecked" />
-        <CheckBox x:Name="CheckboxShowBattlegroundsBrowser"  Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowBrowser}"
+        <CheckBox x:Name="CheckboxShowBattlegroundsBrowser" Content="显示随从图鉴"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top" Checked="CheckboxShowBattlegroundsBrowser_Checked"
                   Unchecked="CheckboxShowBattlegroundsBrowser_Unchecked" Margin="10,5,0,0" />
-        <CheckBox x:Name="CheckboxShowBattlegroundsGuides" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowGuides}"
+        <CheckBox x:Name="CheckboxShowBattlegroundsGuides" Content="显示流派指南"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top" Checked="CheckboxShowBattlegroundsGuides_Checked"
                   IsEnabled="{Binding IsChecked, ElementName=CheckboxShowBattlegroundsBrowser}"
                   Unchecked="CheckboxShowBattlegroundsGuides_Unchecked" Margin="30,5,0,0" />
-        <CheckBox x:Name="CheckboxShowMinionBrowserBetweenGames" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowMinionBrowserBetweenGames}"
+        <CheckBox x:Name="CheckboxShowMinionBrowserBetweenGames" Content="对局间隙显示随从图鉴"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top" Checked="CheckboxShowMinionBrowserBetweenGames_Checked"
                   IsEnabled="{Binding IsChecked, ElementName=CheckboxShowBattlegroundsBrowser}"
                   Unchecked="CheckboxShowMinionBrowserBetweenGames_Unchecked" Margin="30,5,0,0" />
-        <CheckBox x:Name="CheckboxShowBattlegroundsMetaSnapshot" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowMetaSnapshot}"
+        <CheckBox x:Name="CheckboxShowBattlegroundsMetaSnapshot" Content="显示环境流派快照"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top" Checked="CheckboxShowBattlegroundsMetaSnapshot_Checked"
                   Unchecked="CheckboxShowBattlegroundsMetaSnapshot_Unchecked" Margin="30,5,0,0" />
-        <CheckBox x:Name="CheckboxAlwaysShowBattlegroundsTavernTier7" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_AlwaysShowTavernTier7}"
+        <CheckBox x:Name="CheckboxAlwaysShowBattlegroundsTavernTier7" Content="始终显示 7 本随从"
                   HorizontalAlignment="Left" VerticalAlignment="Top"
                   Checked="CheckboxAlwaysShowBattlegroundsTavernTier7_Checked" Unchecked="CheckboxAlwaysShowBattlegroundsTavernTier7_Unchecked"
                   IsEnabled="{Binding IsChecked, ElementName=CheckboxShowBattlegroundsBrowser}"
                   Margin="30,5,0,0" />
-        <CheckBox x:Name="CheckboxShowBattlegroundsTurnCounter" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowTurnCounter}"
+        <CheckBox x:Name="CheckboxShowBattlegroundsTurnCounter" Content="显示回合计时器"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top" Checked="CheckboxShowBattlegroundsTurnCounter_Checked"
                   Unchecked="CheckboxShowBattlegroundsTurnCounter_Unchecked" Margin="10,5,0,0" />
-        <CheckBox x:Name="CheckboxShowChinaModuleOverlay" Content="显示重连器"
+        <CheckBox x:Name="CheckboxShowChinaModuleOverlay" Content="显示断线重连器"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top" Checked="CheckboxCheckboxShowChinaModuleOverlay_Checked"
                   Unchecked="CheckboxCheckboxShowChinaModuleOverlay_Unchecked" Margin="10,5,0,0" />
-        <GroupBox Header="{lex:LocTextUpper Options_Overlay_Battlegrounds_Label_Tier7}" Margin="5,10,5,5">
+        <GroupBox Header="Tier7 进阶统计" Margin="5,10,5,5">
             <StackPanel>
-                <CheckBox x:Name="CheckboxShowBattlegroundsTavernMarkers" Content="{lex:Loc Options_Overlay_BattlegroundsTavernPinning}"
+                <CheckBox x:Name="CheckboxShowBattlegroundsTavernMarkers" Content="显示酒馆随从标记（钉选）"
                           HorizontalAlignment="Left"
                           VerticalAlignment="Top" Checked="CheckboxShowBattlegroundsTavernMarkers_Checked"
                           Unchecked="CheckboxShowBattlegroundsTavernMarkers_Unchecked" Margin="0,5,0,0" />
-                <CheckBox x:Name="CheckboxAutoEnableTavernMarkersRecommended" Content="{lex:Loc Options_Overlay_BattlegroundsTavernPinning_AutoEnable}"
+                <CheckBox x:Name="CheckboxAutoEnableTavernMarkersRecommended" Content="自动启用推荐流派随从标记"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxShowBattlegroundsTavernMarkers}"
                           HorizontalAlignment="Left"
                           VerticalAlignment="Top" Checked="CheckboxAutoEnableTavernMarkersRecommended_Checked"
                           Unchecked="CheckboxAutoEnableTavernMarkersRecommended_Unchecked" Margin="20,5,0,0" />
-                <CheckBox x:Name="CheckboxShowTavernMarkersQuickGuides" Content="{lex:Loc Options_Overlay_BattlegroundsTavernPinning_QuickGuides}"
+                <CheckBox x:Name="CheckboxShowTavernMarkersQuickGuides" Content="显示随从标记快速指引"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxShowBattlegroundsTavernMarkers}"
                           HorizontalAlignment="Left"
                           VerticalAlignment="Top" Checked="CheckboxShowTavernMarkersQuickGuides_Checked"
                           Unchecked="CheckboxShowTavernMarkersQuickGuides_Unchecked" Margin="20,5,0,0" />
-                <CheckBox x:Name="CheckboxEnableTier7" Content="{lex:Loc Options_Overlay_Battlegrounds_EnableTier7}"
+                <CheckBox x:Name="CheckboxEnableTier7" Content="启用 Tier7 覆盖层"
                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,5,0,0"
                           Checked="CheckboxEnableTier7_Checked" Unchecked="CheckboxEnableTier7_Unchecked" />
-                <CheckBox x:Name="CheckboxShowTier7PreLobby" Content="{lex:Loc Options_Overlay_Battlegrounds_ShowTier7PreLobby}"
+                <CheckBox x:Name="CheckboxShowTier7PreLobby" Content="显示开局前大厅面板"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxEnableTier7}"
                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,5,0,0"
                           Checked="CheckboxShowTier7PreLobby_Checked" Unchecked="CheckboxShowTier7PreLobby_Unchecked" />
-                <CheckBox x:Name="CheckboxShowBattlegroundsHeroPicking" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowHeroPickingStats}"
+                <CheckBox x:Name="CheckboxShowBattlegroundsHeroPicking" Content="显示英雄选择统计"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxEnableTier7}"
                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,5,0,0"
                           Checked="CheckboxShowBattlegroundsHeroPicking_Checked" Unchecked="CheckboxShowBattlegroundsHeroPicking_Unchecked"/>
-                <CheckBox x:Name="CheckboxShowBattlegroundsQuestPicking" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowQuestPickingStats}"
+                <CheckBox x:Name="CheckboxShowBattlegroundsQuestPicking" Content="显示任务选择统计"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxEnableTier7}"
                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,5,0,0"
                           Checked="CheckboxShowBattlegroundsQuestPicking_Checked" Unchecked="CheckboxShowBattlegroundsQuestPicking_Unchecked" />
-                <CheckBox x:Name="CheckboxAutoShowBattlegroundsTrinketPicking" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowTrinketPickingStats}"
+                <CheckBox x:Name="CheckboxAutoShowBattlegroundsTrinketPicking" Content="显示饰品选择统计"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxEnableTier7}"
                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,5,0,0"
                           Checked="CheckboxAutoShowBattlegroundsTrinketPicking_Checked" Unchecked="CheckboxAutoShowBattlegroundsTrinketPicking_Unchecked" />
-                <CheckBox x:Name="CheckboxShowTier7CompStats" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowCompStats}"
+                <CheckBox x:Name="CheckboxShowTier7CompStats" Content="显示流派统计"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxEnableTier7}"
                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,5,0,0"
                           Checked="CheckboxShowBattlegroundsCompStats_Checked" Unchecked="CheckboxShowBattlegroundsCompStats_Unchecked" />
             </StackPanel>
         </GroupBox>
-        <GroupBox Header="{lex:LocTextUpper Options_Overlay_Battlegrounds_Label_BobsBuddy}" Margin="5,10,5,5">
+        <GroupBox Header="Bob's Buddy 战斗模拟" Margin="5,10,5,5">
             <StackPanel>
                 <TextBlock Name="TextBobsBuddyDisabled" Foreground="Yellow" Visibility="Collapsed" Margin="0,0,0,5"/>
-                <CheckBox x:Name="CheckboxRunCombatSimulations" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_RunCombatSimulations}"
+                <CheckBox x:Name="CheckboxRunCombatSimulations" Content="启用战斗模拟"
                           HorizontalAlignment="Left"
                           VerticalAlignment="Top"
                           Checked="CheckboxRunCombatSimulations_Checked"
                           Unchecked="CheckboxRunCombatSimulations_Unchecked" Margin="0" />
-                <CheckBox x:Name="CheckboxShowResultsDuringCombat" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowDuringCombat}"
+                <CheckBox x:Name="CheckboxShowResultsDuringCombat" Content="战斗阶段显示模拟结果"
                           HorizontalAlignment="Left"
                           VerticalAlignment="Top"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxRunCombatSimulations}"
                           Checked="CheckboxShowResultsDuringCombat_Checked"
                           Unchecked="CheckboxShowResultsDuringCombat_Unchecked" Margin="0,5,0,0" />
-                <CheckBox x:Name="CheckboxShowResultsDuringShopping" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowDuringShopping}"
+                <CheckBox x:Name="CheckboxShowResultsDuringShopping" Content="购物阶段显示模拟结果"
                           HorizontalAlignment="Left"
                           VerticalAlignment="Top"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxRunCombatSimulations}"
                           Checked="CheckboxShowResultsDuringShopping_Checked"
                           Unchecked="CheckboxShowResultsDuringShopping_Unchecked" Margin="0,5,0,0" />
-                <CheckBox x:Name="CheckboxAlwaysShowAverageDamage" Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowAverageDamage}"
+                <CheckBox x:Name="CheckboxAlwaysShowAverageDamage" Content="始终显示平均伤害"
                           HorizontalAlignment="Left"
                           VerticalAlignment="Top"
                           IsEnabled="{Binding IsChecked, ElementName=CheckboxRunCombatSimulations}"
@@ -138,11 +138,11 @@
                           Unchecked="CheckboxBgsAutoPositioningApply_Unchecked" Margin="0,5,0,0" />
             </StackPanel>
         </GroupBox>
-        <GroupBox Header="{lex:Loc Options_Overlay_Battlegrounds_Group_Label}" Margin="5,10,5,5">
+        <GroupBox Header="对局战绩" Margin="5,10,5,5">
             <StackPanel>
                 <CheckBox
                     x:Name="CheckboxShowSessionRecap"
-                    Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowSessionRecap}"
+                    Content="启用对局战绩覆盖层"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     Checked="CheckboxShowSessionRecap_Checked"
@@ -151,7 +151,7 @@
                 />
                 <CheckBox
                     x:Name="CheckboxShowSessionRecapBetweenGames"
-                    Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowSessionRecapBetweenGames}"
+                    Content="对局间隙显示战绩面板"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     IsEnabled="{Binding IsChecked, ElementName=CheckboxShowSessionRecap}"
@@ -161,7 +161,7 @@
                 />
                 <CheckBox
                     x:Name="CheckboxShowExternalWindow"
-                    Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowExternalWindow}"
+                    Content="显示独立对局战绩窗口"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     Checked="CheckboxShowExternalWindow_Checked"
@@ -170,7 +170,7 @@
                 />
                 <CheckBox
                     x:Name="CheckboxShowMinionsAvailable"
-                    Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowMinionsAvailable}"
+                    Content="显示本局可用种族"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     Checked="CheckboxShowMinionsAvailable_Checked"
@@ -179,7 +179,7 @@
                 />
                 <CheckBox
                     x:Name="CheckboxShowMinionsBanned"
-                    Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowMinionsBanned}"
+                    Content="显示本局禁用种族"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     Checked="CheckboxShowMinionsBanned_Checked"
@@ -188,7 +188,7 @@
                 />
                 <CheckBox
                     x:Name="CheckboxShowStartCurrentMMR"
-                    Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowMMR}"
+                    Content="显示起始与当前分数 (MMR)"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     Checked="CheckboxShowStartCurrentMMR_Checked"
@@ -197,7 +197,7 @@
                 />
                 <CheckBox
                     x:Name="CheckboxShowLatestGames"
-                    Content="{lex:Loc Options_Overlay_Battlegrounds_CheckBox_ShowLatestGames}"
+                    Content="显示本时段最近对局"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
                     Checked="CheckboxShowLatestGames_Checked"
@@ -205,7 +205,7 @@
                     Margin="0,5,0,0"
                 />
                 <StackPanel Orientation="Horizontal">
-                    <Label Content="{lex:Loc Options_Overlay_Battlegrounds_Label_Scaling}" />
+                    <Label Content="缩放比例" />
                     <Slider
                         x:Name="SliderSessionRecapScaling"
                         HorizontalAlignment="Right"
@@ -222,31 +222,30 @@
                 <DockPanel Margin="0,5,0,0">
                     <Button
                         Width="150"
-                        Content="{lex:Loc Options_Overlay_General_Button_Reset}"
+                        Content="重置"
                         Command="{Binding ResetSessionCommand, RelativeSource={RelativeSource AncestorType=overlay:OverlayBattlegrounds}}"
                         VerticalAlignment="Top"
                         Margin="0,3,0,0"
                         DockPanel.Dock="Right"
                     />
-                    <Label Content="{lex:Loc Options_Overlay_Battlegrounds_Button_ResetSession}" DockPanel.Dock="Left"/>
+                    <Label Content="重置本时段战绩" DockPanel.Dock="Left"/>
                 </DockPanel>
                 <TextBlock
-                    Text="{lex:Loc Options_Overlay_Battlegrounds_Label_ResetSessionDesc}"
-                    Foreground="White"
-                    Opacity=".55"
+                    Text="重置后将清空本时段的战绩记录，并以当前分数作为新的起始分数。"
+                    Foreground="Gray"
                     TextWrapping="WrapWithOverflow"
                     TextAlignment="Left"
                     Margin="5,0,5,0"
                 />
                 <DockPanel Margin="0,5,0,0">
-                    <Button Name="BtnUnlockOverlay" Content="{lex:Loc Options_Overlay_General_Button_UnlockOverlay}" Width="150"
+                    <Button Name="BtnUnlockOverlay" Content="解锁" Width="150"
                     Click="BtnUnlockOverlay_Click" DockPanel.Dock="Right" />
-                    <Label Content="{lex:Loc Options_Overlay_General_Label_MoveResize}" DockPanel.Dock="Left"/>
+                    <Label Content="移动 / 调整面板" DockPanel.Dock="Left"/>
                 </DockPanel>
                 <DockPanel Margin="0,5,0,0">
-                    <Button x:Name="BtnResetOverlay" Content="{lex:Loc Options_Overlay_General_Button_Reset}" Width="150" Click="BtnResetOverlay_Click"
+                    <Button x:Name="BtnResetOverlay" Content="重置" Width="150" Click="BtnResetOverlay_Click"
                     DockPanel.Dock="Right" />
-                    <Label Content="{lex:Loc Options_Overlay_General_Label_Reset}" DockPanel.Dock="Left" />
+                    <Label Content="重置面板位置" DockPanel.Dock="Left" />
                 </DockPanel>
             </StackPanel>
         </GroupBox>
@@ -254,6 +253,6 @@
             Click="OverlayHelpButtonClick"
             Foreground="#FF47B1DF"
             Visibility="Visible"
-            Content="{lex:LocText Options_Tracker_Capture_Battlegrounds_Overlay}"/>
+            Content="酒馆战棋覆盖层说明"/>
     </StackPanel>
 </UserControl>
